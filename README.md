@@ -1,2 +1,5 @@
-# collection
- A Pandoc Lua filter to build collections
+# Collection
+
+ A Lua filter for Pandoc to build collections.
+
+ 

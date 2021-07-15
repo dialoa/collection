@@ -3,6 +3,10 @@ collection:
 	title: My collection
 	editor: Caesar, Julius
 chapters:
-- chapter1.md
-- chapter2.md
+- | 
+  # This is the preface
+- file: chapter1.json
+  format: json
+  author: John Doe
+- file: chapter2.md
 ---

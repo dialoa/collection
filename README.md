@@ -3,16 +3,16 @@ title: "Collection - generating collections with Pandoc"
 author: "Julien Dutant"
 ---
 
+**WORK IN PROGRESS**. *The filter is not functional yet.*
+
 A Lua filter for Pandoc to build multi-authored collections
 (journals, monographs) from markdown source to LaTeX/PDF, epub, html,
 JATS XML.
 
-*Work in progress, starting with LaTeX and HTML output*.
-
 # Usage
 
-The filter is a run on a *collection source* to generate a collection.
-The collection driver is a markdown document, but only consists of a
+The filter is a run on a *master file* to generate a collection.
+The master file is a markdown document, but only consists of a
 YAML metadata block:
 
 ```yaml
@@ -21,15 +21,25 @@ title: Journal of Serious Studies
 author: Jane Doe 
 chapters:
 - file: preface.md
-- '\mainmatter'
+- 'Copyright (c) Jane Doe 2021'
 - file: 'chapter1/source.json'
   format: json
 - file: 'chapter2/source.md'
 ---
 ```
 
-The filter gets each chapter's metadata, in particular title, author,
+The `chapters` field is a list of elements; the collection will be built
+from them in that order. Elements can be content or metadata referencing
+a file. Content is included as is; files are imported. The filter gets 
+each imported file's metadata, in particular title, author,
 bibliography, and generates a collection. 
+
+## Design
+
+* you will process each local document with its updated metadata, convert
+  it to the desired output format (including citeproc biblio) and 
+  insert it in master as a RawBlock. 
+* qu: the updated metadata isn't available in the chapter source document. 
 
 ## Terminology
 
@@ -42,6 +52,20 @@ bibliography, and generates a collection.
 *  
 
 ## Background technical details
+
+## Issue
+
+When to apply the filters to a document?
+
+* Suppose you get the 
+ document metadata's first. Then you process it again with filters, 
+ and these filters modify its metadata (header-includes). What do 
+ you do? ANS: you only care about header-includes, and you get 
+ those at the second, processing time.
+* Suppose you process the document first. What if your master file 
+  specifies an alternative title or author for that document? (Or a 
+  first page?) the 
+  processor will use the metadata in the chapter file only. 
 
 ### Paths in Pandoc
 

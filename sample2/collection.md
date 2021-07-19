@@ -5,4 +5,5 @@ collection:
 chapters:
 - file: chapter1.md
 - file: chapter2.md
+- file: chapter3.md
 ---

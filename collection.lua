@@ -74,7 +74,7 @@ function citeproc(doc, bib)
             '--from=json',
             '--to=json',
             '--citeproc',
-            string.format('--bibliography=%s', bib)
+            string.format('--bibliography=%s', bib),
 	    '--metadata=reference-section-title:References',
             '--metadata=link-citations'
         }

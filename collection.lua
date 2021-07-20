@@ -63,6 +63,25 @@ function  read_from_file( filepath, format )
 
 end
 
+function citeproc(doc, bib)
+
+    -- https://pandoc.org/lua-filters.html#pandoc.utils.run_json_filter
+    -- TODO: set CSL (and other options)
+    return utils.run_json_filter(
+        doc,
+        'pandoc',
+        {
+            '--from=json',
+            '--to=json',
+            '--citeproc',
+            string.format('--bibliography=%s', bib)
+	    '--metadata=reference-section-title:References',
+            '--metadata=link-citations'
+        }
+    )
+
+end
+
 -- # Filter functions
 
 --- Build Collection
@@ -70,7 +89,19 @@ end
 --
 function build_collection(doc)
 
-	return(doc)
+for i = 1, #doc.meta.chapters do
+        
+        local chapter = read_from_file(doc.meta.chapters[i].file)
+        if doc.meta.chapters[i].bibliography then
+            local chapter_with_bib = citeproc(chapter, utils.stringify(doc.meta.chapters[i].bibliography))
+            doc.blocks:extend(chapter_with_bib.blocks)
+        else
+            doc.blocks:extend(chapter.blocks)
+        end
+    
+    end
+    
+    return(doc)	
 
 end
 
@@ -158,6 +189,8 @@ return {
 			if doc.meta.chapters and doc.meta.chapters.t == 'MetaList' then
 				get_options(doc.meta)
 				doc.meta = import_chapters_meta(doc.meta)
+				doc.meta.title = doc.meta.collection.title
+                		doc.meta.author = doc.meta.collection.editor
 				return build_collection(doc)
 			else 
 				message('WARNING', 'No chapters found, no collection to build.')

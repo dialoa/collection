@@ -1,85 +1,317 @@
 ---
-title: Design of the collection filter
+title: Design of the `collection` filter
 author: Julien Dutant
 date: July 2021
+number-sections: yes
 ---
 
 # Goal
 
-Given a master file, put together chapter sources and templates into a volume and (optionally) offprints (of all/selected chapters), in various output formats (PDF, epub, jats-xml, html). The command should be something like:
+Given a master file, put together chapter sources and templates to generate a (a) volumes, (b) offprints, (c) proofs in various output formats. The command should be something like:
 
 ```bash
 pandoc -L collection.lua master.md <options>
 ```
+
+Volumes are entire collections. Offprints are single chapters (articles) that are meant for public distributions. Proofs are single chapters (articles) that are used by copyeditors and authors at the copyediting and proofreading stages.
+
 ## Inputs
 
-* *Master file*. `master.md`
-* *Source files*. `chapter1.md`, etc. Targeting `md` but we could leave the format open.
+* *Master file*. Describes the collection. Below we assume it's named `master.md`
+* *Source files*. `chapter1.md`, etc. Targeting markdown but we could leave the format open.
 * (?) Markdown bits included in the source file. (not necessarily to support this)
-* Chapter-in-book template(s)/filter(s)/defaults: chap-in-book.latex, chap-in-book.jats, … chap-in-book.lua. (in pple could be several ones, e.g. depending whether the chap is an article or a book review or a preface)
-* Chapter-in-book defaults: *if* the filter runs pandoc on the chapters (pandoc.pipe(‘pandoc’…, chapter-string) rather than pandoc.read(chapter) ), then chap-in-book.yaml defaults . 
-* Book template(s)/filters(s): book.latex, book.epub, book.lua.
-* Chapter-offprint templates(s)/filter(s): same as above, but for printing a chapter on its own 
-* Local filters: filters applied to all/some of the chapters. (E.g. in dialectica, filters that handle various formatting elements: first-line-indent, columns, recursive-citeproc, pandoc-crossref …)
-* Global filters: filters applied to the complete book. (Some formatting filters could be here instead, e.g. first-line-indent; but not recursive-citeproc)
-* Local media: for each chapter, its media files (images…) plus any generated media files (images for LaTeX code that MathJAX can’t handle)
-* Global media: same but for the book
+*  *Local media*. For each chapter, its media files, bibliography, plus any media files generated on-the-fly, e.g. TikZ/LaTeX converted to images.
+* *Local filters, templates, defaults*. User's filters, templates and defaults to be applied to each chapter when part of the collection. `collchapter.lua`, `collchapter.yaml`, `collchapter.latex` etc.
+  * defaults only supported if the filter generates output format code on a per-chapter basis.
+  * may be kind-specific, e.g. for book reviews vs orginal articles vs editor's preface etc.
+* *Offprint and proof filters, templates, defaults*. User's filters, templates and defaults to be applied to a chapter to generate an offprint or proof output.
+*  *Global media*. Collection-level media, e.g. book cover image, user-provided or generated on the fly (possibly by some user filters).
+* *Global filters, templates, defaults*. Users' filters, templates and defaults to be applied to the entire collection.
 
+## Outputs
 
+* *Volume galley*. Output file(s) for the entire volume in output format.
+* *Offprints* and *proofs*. Output files for individual chapters in the output format. Offprints are meant for publications, proofs internal working, but these could be the same files.
+* *Media bags*. For formats like html, the output will include a media bag (image files.)
+* *Log*. Provide a verbose log of the filter's step, for easier debugging.
+* (?) *Page numbers list*. A file recording the start page of each chapter
+* (?) updated `master.md`. A `master.md` file supplemented with page numbers for chapters.
 
+# Command line
 
+Call *parent* the instance of Pandoc that runs the filter (the one created when we run `pandoc -L collection.lua master.md`), and *children* any pandoc instance created by the filter (with `pandoc.pipe('pandoc', ...)` or `pandoc.utils.run_json_filter('pandoc', ...)` or `os.execcute`).
 
+We have to main options for our command line design: is our book output created by the filter's parent or its children?
 
+## Option: Parent-based
 
-### Goal
+The filter's parent handles book output.  We run:
 
-Given a master file, source files for every chapter, and a bunch of filters and templates, generate all
+```bash
+pandoc -L collection.lua master.md -o book.pdf
+```
 
-Goal:
-Run “pandoc -L collection.lua master.md [options]” one or several times and you get all your outputs.
+And the filter puts together a master AST document, which the *parent* turns into `book.pdf`.
 
-Inputs:
--   Source files: master.md, chap-1.md etc
+User's *global* filters, defaults, templates are specified when running the command:
 
-
-Command specification: two main options. (Terminology: when you run ‘pandoc -L collection.lua’ we call the pandoc instance that runs collection.lua the “parent” instance of Pandoc; if collection.lua calls pandoc with pandoc.pipe or pandoc.utils.run_json_filter we call these “child” instances of Pandoc)
-
-OPTION 1: PARENT, parent handles the book output/all output. We run:
-Pandoc -L collection.lua master.md -o book.pdf
-And the filter puts together a master AST document, which the *parent* turns into book.pdf. On that option, *global filters* are specified when running the command above:
+```bash
 Pandoc -L collection.lua master.md -d book-defaults.yaml -o book.pdf
-Where book-defaults.yaml can specify various filters, LaTeX engine etc. 
+```
 
-Sub-options: how do we get offprints? Are they a side-product of the book command? Or do we run the same command again, but specifying that we want a specific chapter:
-Pandoc -L collection.lua master.md -M offprint=1 -d offprint.yaml -o chapter-1.pdf
+### Sub-options: offprint generation
 
-OPTION 2 CHILDREN, children handles the book output. We run:
-Pandoc -L collection.lua master.md
-The command runs the filter, which calls one or more *child* pandoc processes to generate the book (and possibly offprints). The filter then returns and empty document, which Pandoc outputs either as html in stdin or in a sink file (sink.pdf).
+Does the filter generate offprints and proofs while its parent generates the entire book?
+
+1. All-at-once: offprints are generated while the parent generates the entire book.
+2. One-by-one: offprints are generated by running pandoc several times on `master.md`
+
+One-by-one offsets one of the points of the collection filter: avoiding Makefiles! On the other hand, All-at-once is a hybrid process: some outputs are generated by child processes, some by the parent process; may lead to duplicate or unsystematic code.
+
+See also [Offprint process](#offprint-process) for further discussion of the interface to print offprints.
+
+## Option: Child-based
+
+Children handle the output. The filter starts various pandoc instances to process the proofs, offprints, or book as desired, possibly in several formats at once. Basically the filter is a `make` for `master.md`. Once that's done, it sends an empty doc to its parent, which we can send to a sink file.
 
 In that option, filters and defaults for the book aren’t passed on the command line, but through master.md metadata.e.g.
+
+```yaml
 Collection:
   Defaults: default file
   Filters:
 -   Global-filter-1.lua
 -   Global-filter-2.lua
   Templates:
--   book-template.latex 
--   …
+-   book-template.latex
+-   ...
+```
 
-Sub-options for option 2: how do we pass the desired output format?
+### Sub-options: passing the format
 
-Sub-option 2a: SINK OUTPUT. We use Pandoc’s FORMAT variable. So our command must be:
+How do we pass the desired output format?
+
+#### Sub-option: sink output
+
+We use Pandoc’s FORMAT variable. So our command must be:
+
+```bash
 Pandoc -L collection.lua master.md -o sink.pdf
-Where sink.pdf will be an empty pdf that we discard (| rm sink.pdf); the actual pdf is generated by a child pandoc process of collection.lua. 
+```
 
-Sub-option 2b: OUTPUT FORMAT METAVARIABLE. We use a meta-variable to tell collection.lua which format(s) to output. To print out all formats (PDF, html, JATS) we do:
+Where `sink.pdf` will be an empty pdf that we discard (`| rm sink.pdf`). The actual pdf is generated by a child pandoc process of collection.lua.
+
+#### Sub-option: metavariable
+
+We use a meta-variable to tell the filter which format(s) to output. To print out all formats (default PDF, html, JATS, but we can provide a metadata field in `master.md` to say which are desired) we do:
+
+```bash
 Pandoc -L collection.lua master.md
-To print out PDF we do:
-Pandoc -L collection.lua master.md -M output-format=pdf
-Important note: I’ve made a test, the variable FORMAT can be set within a filter. Pandoc will ignore the modification (it will still output html is that’s what was requested on the command line), but within the filter FORMAT can have any value we want. This means that if chapter formatting is done by user functions called within collection.lua (with mod.require), users can still write their functions like standard filters using the FORMAT. 
+```
+To generate PDF output only we do:
 
-COMPARISON OF OPTIONS 1 AND 2
--   Option 2 gives collection.lua more power and flexibility. The filter knows everything about the final book, including which global filters are meant to be applied. It can generate all output formats at once (with sub-option 2b). It can do a dry run to get page numbers in PDF if needed. 
--   Option 1 is leaner and probably requires less coding. 
--   Option 2 separates tasks well. Collection.lua’s job is essentially to run child pandoc processes. All the rest can be left to user’s filters / templates. 
+```bash
+Pandoc -L collection.lua master.md -M output-format=pdf
+```
+
+Note: the variable `FORMAT` can be set within the filter. Pandoc will ignore the modification (it will still output html is that’s what was requested on the command line), but it allows us to reset it. This means that if chapter formatting is done by user functions called by our filter with `mod.require`, users can still write their functions like standard filters using the FORMAT.
+
+
+## Comparison
+
+__Discussion: parent-based__
+
+* The filter doesn't run a child process for generating the book. Upside: efficient
+* The filter will not know what the user's defaults/filters/templates are. It only has access to PANDOC_STATE. Upside: no need to take care of this. Downside: maybe we'd need the info?
+* If the filter generates offprints while the parent handles the book, they will be generated before the book. Downside: filter cannot use book outputs (page numbers, table of contents).
+* If the filter generates offprints on specific calls
+
+__Disscusion: child-based__
+
+* Can handle all output formats at once. Convenient.
+* May need to replicate pandoc functions (creating media bags, moving files, passing on error messages).
+
+__Discussion: comparison__
+
+-   Option 2 gives collection.lua more power and flexibility. The filter knows everything about the final book, including which global filters are meant to be applied. It can generate all output formats at once (with sub-option 2b). It can do a dry run to get page numbers in PDF if needed.
+-   Option 1 is leaner and probably requires less coding.
+-   Option 2 separates tasks well. Collection.lua’s job is essentially to run child pandoc processes. All the rest can be left to user’s filters / templates.
+
+# Core process
+
+Some choice points and discussion.
+
+# Who needs to know what
+
+* Proof output. Needs: only the article's metadata, content, bibliography, media.
+  - if a book has only biblio, specified at collection-level, it needs to be passed to the chapter.
+* Offprint output. Needs article's metadata, content, biblio, media and:
+  - page numbers.
+  - collection metadata (vol, issue, date, ...).
+  - (in some use cases) collection table of contents, for those who want to include it at the end of the offprint.
+  - (in some use cases) the common biblio.
+* Book output. Needs:
+  - table of contents (formatted, or as a list of objects)
+* Index, list of figures, list of contents. May need AST version of the book.
+
+## Build global AST or RawBlocks?
+
+* Build AST. We put together the issue as an AST. That is, we apply `pandoc.read` to each chapter source file and insert it in a global Pandoc AST object. Global filters may generate a few RawBlocks / RawInlines here and there targetting the output format, but otherwise most of the document is in AST.
+* Build RawBlocks. We convert the individual chapters to Raw output before putting them together. That is, we run `pandoc.pipe('pandoc', ...)` on each chapter source file, through desired filters and templates, and them import the resulting string. We can put these chapter Raw strings in the main AST Pandoc object as RawBlocks (Parent-based), or alternatively simply concatenate the strings and output a file (Child-based).
+
+*Note*. This is analogue to the [Knit-and-Merge vs Merge-and-Knit options in Bookdown](https://bookdown.org/yihui/bookdown/new-session.html).
+
+A couple of intermediate approaches:
+- Offer a *switch* between both. That is, a metadata switch tells the filter which approach to use.
+- combine both
+
+__Discussion__
+
+Rules of thumbs: AST better for monographs (uniform, interconnected), RawBlocks better for journals. AST filter-oriented, RawBlocks template-friendly.
+
+* AST mode allows *global filtering of chapters*. In RawBlocks mode once a chapter is imported, it can't be filtered or formatted any further. So you need to run the required filter on each chapter (slower).
+* AST mode also allows *clever global filters* that scour the book's parsed contents, e.g. for indexing, building a global toc, and the like.
+* RawBlocks mode supports both *filter and template formatting of chapters*, AST mode *only filter formatting of chapters*.
+  - in AST mode, we basically can't apply *templates* to chapters; the formatting has to be done with filters instead. Consider: suppose my collection has `chapter1.md` with type `article` and `chapter2.md` with type `book-review`, and I have two templates `article.latex` and `article.html`. I first pull both chapters in a global AST. Then I let the parent pandoc generate the book output. It will call a global template `book.latex`. But to that template the entire book contents will be passed in the `$body$` variable, with no way of applying sub-templates to various parts.
+  - in RawBlocks mode, as you import the chapter, you run pandoc on it with (a) user filters and (b) user templates. So both types of formatting are accessible. Hence the RawBlocks mode straightforwardly supports chapter-specific templates.
+* AST mode could support *filters for title blocks* though, but that's a bit of a hack and requires more pandoc calls (slower).
+  - method: the user provides two templates, `chap-begin.latex` and `chap-end.latex`. The filter builds an empty doc with the chapter's metadata (supplemented with collection metadata as needed), converts it to JSON, then passes it to `pandoc -f json -t latex --template chap-begin.latex` to get the user's desired latex code at the beginning of the chapter, which we insert in the AST as a RawBlock, and similarly for the chap end. Thus we have RawBlock code for chapter titles and author blocks, but keep the bulk of the chapter in AST. That does hamper the ability of global filters to figure out the divisions of the document, though.
+  - Perhaps the lesson is that there are only really two options, all-AST and all-Raw. If we use AST, we should have some AST representation of chapter/part headers. At miniminum that could be a native Div enclosing the template-based Raw block for instance, with an id or key that links it to the chapter's metadata in doc.meta.
+* AST mode *separates chapters contents from their metadata*. In your global AST Pandoc object `doc`, you'll have (1) the `chapters` list in `doc.meta`, which contains metadata of individual chapters, and (2) the chapter bodies in `doc.blocks`.
+* Cross-referencing across chapters is possible even in RawBlocks mode, provided the sources use the right identifiers.
+
+## Build Raw outputs from parent, files or from AST
+
+There are three ways of generating Raw outputs, ranked from most to least convenient:
+
+1. *Parent builds from AST*. The filter populates the parent's main `Pandoc` object, and lets the pandoc parent process convert it to raw output.
+2. *Filter builds from file*. The filter runs a child pandoc process on a source file.
+3. *Filter builds from AST*. The filter runs a child pandoc process and uses it to convert from AST to Raw output string.
+
+*Parent builds from AST* is Pandoc's basic mode of functioning. The downside is that it generates only one output.
+
+*Filter builds from file* is just using a filter to run pandoc commands that basically rely on (1). The downside is that it only works on 'dead' sources: the pre-existing markdown source files. All AST modifications, metadata additions have to be passed via the command line to the child process.
+
+*Filter builds from AST* is possible but clunky. Suppose within a filter you want to convert to raw a single section/chapter of the main Pandoc object. Then you need to (a) convert it to a native JSON representation string, and (b) pass that string to a child pandoc process to convert it to the desired output. Downsides: needs Perl, I don't know how robust my to_json conversion is, needs two external calls rather than one.
+
+### Filter builds from files: passing metadata
+
+The main limitation of having the filter call a child pandoc process to generate raw from the source files is that the child process won't get from those files any collection-level information:
+
+* Volume, issue, date, possibly page numbers should be passed down to the file.
+* Possibly other things, e.g. volume's table of contents, bibliography.
+* *Identifiers present elsewhere in the collections*, to avoid duplicates. See [separate discussion below]{#crossref}
+* Some other metadata or collection-level info that the user's own chapter templates may want.
+
+If you pass collection-level info, the main choice point is: *inert or dynamic*?
+
+1. *Inert*. You pass a reference to the file `master.md`, and tell the child process to apply a filter `import-master-metadata` that uses that reference to read `master.md` and get info from this. This is good for info that is set in stone in the collection's master source: e.g. date, issue number, collection doi, ... . But not suitable for info that the filter builds, e.g. a list of identifiers present in other chapters.
+2. *Live*. You pass info from the parent process (whether it was written in `master.md` or computed on the fly) to the child process. This can be done in two ways:
+  - through the command line with the `-M` flag. Suitable for boolean or string values only. We can put a lot in a long string, but then it needs to be parsed.
+  - through a temp file; we give the child process a reference to the file. Again this file needs to be parsed. But if it's a markdown file `info.md` with only a yaml block, we can try to have pandoc parse it.
+
+On passing info through a temp md file. When you run `pandoc info.md source.md`, if `info.md` only contains a yaml block Pandoc will merge the metadata of both files. So your filter could create a temp file:
+
+```markdown
+---
+collection:
+  volume: 34
+  issue: 1
+  date: 06/01/2021
+---
+```
+
+Note though that Pandoc's yaml merge is crude. if `source.md` has fields with the same name as `info.md` the latter will be wiped (even if both are lists, for instance).
+
+# Offprint process
+
+## Interface
+
+Variety of uses:
+- get volume + offprints in all output formats in one command
+- get volume only in a specific format
+- get some chapter in all/some output format. I may want to ask for the chapter by its filename or number in the list of chapters or item
+- get outputs with a standard filename, for publication.
+- get outputs with some temp/custom name like `test.pdf`
+- get a proof of `source.md` before it's part of a proper collection
+- get a selection of some offprints in the collection, but not all?
+
+Ideally we'd like flexibility: quick-and-dirty commands when we run quick tests, polished, detailed info when we want something specific.
+
+Some challenges:
+
+* When we want an single output, use `-o output.pdf` to specific the output filename. BUT: that won't be possible in the Child-based approach, which normally generates its outputs on the side and sends an empty doc to the parent.^[We *could* write `output.pdf` and throw an error to stop the pandoc parent process before it's erased, but that would be messy.]
+* When we went offprints rather than the volume, we don't want to specify a different template in the command line: `pandoc -L collection.lua -offprint-only=1` should be enough. Since the single chapter vs volume templates are stable features of the collection, we would like to be able to specify them once and for all in a defaults file or `master.md` and forget about them. BUT that's not compatible with the Parent-based option, which needs to have the global template provided before the collection filter is called.
+* We'd like to provide some options quickly, like:
+
+  ```bash
+  collection master.md -offprint 1 -f pdf -f html
+  collection master.md -proof "new-article/source.md" -f pdf
+  ```
+  but given that we mostly have to go through metavariables, our commands will be more messy:
+
+  ```bash
+  pandoc -L collection.lua master.md -M collection-offprint=1 -M collection-outputs="pdf,html" collection-outfilename="test"
+  ```
+
+__Moral__
+
+I wonder if we shouldn't distinguish two tasks:
+
+- putting together *one* output file, either of the whole volume or on offprint. This is a typical pandoc job.
+- issue commands to do various instances of the first task. This is not a pandoc job; makefile, scripts do it well.
+
+The trick though is that both process the same input, in particular `master.md`.
+
+Note: we should distinguish putting together volume vs offprint. An offprint is a one-chapter volume, with a different template.
+
+# Further topics
+
+## Cross-referencing across chapters {#crossref}
+
+Elements with the same id in different chapter source files are common:
+
+- pandoc automatically assigns identifiers to headers, so every `# Conclusion` header will have an identifier `conclusion`.
+- some authors/copyeditors use generic identifers for headers, example lists: `# The problem {#sec-1}`, `(@ex1) Example` etc.
+
+There's a tension between two goals:
+
+- allow the same id to be used in different chapter sources,
+- allow cross-references across chapters.
+
+If we let the source ids as they are, we'll often get duplicates and links that point to the wrong target. If we add a chap-specific prefix to all identifiers, we prevent cross-references across chapters.
+
+Easy case: when each chapter has its bibliography, we want to isolate citation links from one chapter to another. By contrast, if there's a unique biblio, all citation links should target it. So we can simply add a chap-specific prefix all citation links if, and only if, each chapter has its own biblio.
+
+In Dialectica, we don't want cross-references across chapters. So we could have a blanket approach of prefixing all ids with a chap-specific prefix.
+
+But what about the general case? We could offer a switch:
+
+- Blanket isolation approach. We apply chap-specific prefixes throughout. Users can use the same ids in every chap; they can't cross-reference across chap.
+- Blanket fusion approach. We leave the ids as is; throw a warning if we spot duplicates. The onus is on the author to avoid them.
+
+Are there intermediate approaches? Basically, try to guess which duplicate ids are targeted by which links. Idea, the *clever* approach:
+
+- if several elements have the same id within a chap, throw a warning.
+- if several elements have the same id but are in difft chapters, add a prefix or suffix to the later ones.
+- if a link targets an id given to several eleemnts (in difft chaps), assume that it targets the one in the same chapter. If all the elements with that id are in other chapters, throw a warning.
+
+*What can be done about duplicates if chapters are processed locally?* Suppose your filter calls a child process on the chapter source file. Optionally, it tells the child process to apply a `fix-internal-links` filter.
+
+```lua
+result = pandoc.pipe("pandoc", {"-t", "latex", "-L", "fix-internal-links.lua"}, source-file)
+```
+
+What can be done about duplicate ids and cross-referencing across chapters?
+
+1. The *blanket isolation* approach can be applied. Our filter just needs to pass a prefix to the child process, e.g. with a metavariable (`-M id_prefix='ch1-'`). The `fix-internal-links` filter adds the prefix to all ids.
+2. The *fusion* approach can be applied, except that you can't warn the user about duplicates. Possible solution (with a performance cost): you read all the sources first to spot duplicates and warn the user.
+3. The *clever* approach can't be easily used, as the child process would need to get a list of identifiers. You could try passing it through a long metadata string (comma-separated list).
+
+## Syntax for hybrid master document
+
+Possible extension: allow "hybrid" master documents that have some content on top of the metadata block. Less systematic, but attractive for some book or thesis projects.
+
+* The body of `master.md` will be included in the collection
+* Some chapters can be placed at specific spots with Span elements: `[chapter1.md]{.here}`, `[chap-identifier]{.here}`.
+* A Span `[*]{.here}` will place all chapters not placed elsewhere. Otherwise the remaining chapters are placed at the end.

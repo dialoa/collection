@@ -265,6 +265,35 @@ The trick though is that both process the same input, in particular `master.md`.
 
 Note: we should distinguish putting together volume vs offprint. An offprint is a one-chapter volume, with a different template.
 
+# A proposal
+
+For a start, we get up an running a RawBlocks based approach, One-by-one generation. The commands should look like:
+
+```bash
+pandoc -L collection.lua master.md -d book.yaml -o book.pdf
+pandoc -L collection.lua master.md -d offprint.yaml -M collection-only-offprint=1 -o chapter1.pdf
+```
+
+The defaults specify a different templates for book and for offprint. But within the filter, we call (via pandoc.pipe):
+
+```bash
+pandoc chapter1.md -d chapter.yaml -t latex
+```
+
+And insert the result as Rawblock in the document. The chapter.yaml defaults specifies a template that generates the inner latex code for chapters, which is common to the volume and offprints and proofs.
+
+Once we get that running, we can further automatize. Namely, we can write a separate `maker.lua` filter that calls all the commands above. We specify the relevant `book.yaml`, `offprint.yaml` `chapter.yaml` in the `master.md`, and we run:
+
+```bash
+Pandoc -L maker.lua master.md
+```
+
+Which basically runs all the above. Maker can also be ran for specific outputs, something like:
+
+```bash
+Pandoc -L maker.lua master.md -M format=’pdf,html’ -M only-offprint=1 -M output-file='chap1.pdf'
+```
+
 # Further topics
 
 ## Cross-referencing across chapters {#crossref}

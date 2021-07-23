@@ -189,8 +189,14 @@ return {
 			if doc.meta.chapters and doc.meta.chapters.t == 'MetaList' then
 				get_options(doc.meta)
 				doc.meta = import_chapters_meta(doc.meta)
-				doc.meta.title = doc.meta.collection.title
-                		doc.meta.author = doc.meta.collection.editor
+				if doc.meta.collection then
+					if doc.meta.collection.title then 
+						doc.meta.title = doc.meta.collection.title 
+					end
+					if doc.meta.collection.author then
+						doc.meta.author = doc.meta.collection.author
+					end 
+				end
 				return build_collection(doc)
 			else 
 				message('WARNING', 'No chapters found, no collection to build.')

@@ -1,0 +1,7 @@
+
+standalone: true
+pdf-engine: lualatex
+template: ${.}/book
+number-sections: true
+table-of-contents: true
+

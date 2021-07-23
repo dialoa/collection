@@ -208,20 +208,25 @@ If you pass collection-level info, the main choice point is: *inert or dynamic*?
 1. *Inert*. You pass a reference to the file `master.md`, and tell the child process to apply a filter `import-master-metadata` that uses that reference to read `master.md` and get info from this. This is good for info that is set in stone in the collection's master source: e.g. date, issue number, collection doi, ... . But not suitable for info that the filter builds, e.g. a list of identifiers present in other chapters.
 2. *Live*. You pass info from the parent process (whether it was written in `master.md` or computed on the fly) to the child process. This can be done in two ways:
   - through the command line with the `-M` flag. Suitable for boolean or string values only. We can put a lot in a long string, but then it needs to be parsed.
-  - through a temp file; we give the child process a reference to the file. Again this file needs to be parsed. But if it's a markdown file `info.md` with only a yaml block, we can try to have pandoc parse it.
+  - through a temp file; we give the child process a reference to the file. Again this file needs to be parsed. But if it's a yaml file or a markdown file with only a yaml block we can let Pandoc do it - with some limitations.
 
-On passing info through a temp md file. When you run `pandoc info.md source.md`, if `info.md` only contains a yaml block Pandoc will merge the metadata of both files. So your filter could create a temp file:
+__Passing info to children with temp files__. Put the info you want to pass in `yaml` format:
 
-```markdown
----
+```yaml
 collection:
   volume: 34
   issue: 1
   date: 06/01/2021
----
 ```
 
-Note though that Pandoc's yaml merge is crude. if `source.md` has fields with the same name as `info.md` the latter will be wiped (even if both are lists, for instance).
+Pass it either via the *extra default file* or *chaining* method. The default file approach is to put the info in the `metadata` field of a (supplementary) defaults file `info.yaml`, which is then passed to pandoc: `pandoc source.md -d chapter-defaults.md -d info.yaml source.md -t latex`. The chaining method is to put it in the yaml metadata block of an otherwise empty markdown file `info.md` and ask pandoc to process it first along your file: `pandoc source.md -d chapter-defaults.md info.md source.md -t latex`. In both cases Pandoc will merge the metadata. In case of conflicts:
+
+* in the defaults approach, `info.yaml` prevails
+* in the chaining approach, `source.md` prevails
+
+For this reason the *extra defaults file* method seems better.
+
+*Limitation*: Pandoc's yaml merge [isn't clever](https://github.com/jgm/pandoc/issues/4057) (so far). If it's merging two yaml blocks/files with a `collection` key, it'll just erase one and replace it with the other. That's ok if collection is a string or boolean, but if it's a map or list, it won't merge the maps or lists in the intuitive way (adding list entries, adding/replacing map keys). It'll just erase one map/list and use the other.
 
 # Offprint process
 

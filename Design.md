@@ -379,9 +379,9 @@ Primitives in italic, defined objects in bold. `[` ... `]` is map, plural means 
 * *outputs*: outputs, e.g. PDF, html.
 * **source** = `[` *metadata*, *text*, *biblio*, *media* `]`. Article source.
 * **master** = `[` **collection-setup**, *#resources*, *metadata*, **chapters** `]`. Volume description. We're thinking of a master as having one output (the 'default' output), but **command** objects (below) can transform it into a master that generates other outputs.
-* **collection-setup** = *#resources*, *metadata, **chapters** `->` *blocks* -> *output*. 
+* **collection-setup** = *#resources*, *metadata, **chapters** `->` *blocks* `->`` *output*. 
 * **chapter** = `[` **source-setup**, *#resources*, **source** `]`
-* **source-setup** = *#resources*, **source** -> *blocks*
+* **source-setup** = *#resources*, **source** `->`` *blocks*
 * **command** = **master** `->` **master**. A command can change the **collection-setup** and **source-setups** in a **master** to generate other outputs. Formally, we get a new **master** object. 
 
 The generation of one document works like this. Given a **master**, apply **collection-setup** to *#resources*, *metadata*, **chapters**, and get a function *F* from *blocks* to *output*. For each **chapter** in **chapters**, apply **source-setup** to *#resources*, **source** to get *blocks*. Apply *F* to the *blocks* and you get the output. 

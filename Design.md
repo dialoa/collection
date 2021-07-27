@@ -388,5 +388,17 @@ The generation of one document works like this. Given a **master**, apply **coll
 
 A messy feature: **chapters** used twice. Not sure about the right type for collection-setup. 
 
+Now the user provides:
 
+* *command string*: a list of terminal parameters passed to pandoc.
+* *master file*: a file containing a specification of a volume in yaml, conventionally `master.md`. 
 
+Our filter, with Pandoc, should parse the user-provided *master file* and optionally a *command string* into an **master** object and a **command** (the identity function if no command string is provided). We apply the latter to the former and get a **master** object. We turn it into an *output* given the above. 
+
+So our filter has two components: a *parser*, which turns the user's master's file into a **master** object, and the *builder*, which turns the **master** into output. It's not sure, however, that these objects should be implemented in the code. For instance, if our filter works in a way that requires defaults to be passed on the terminal:
+
+```bash
+pandoc -d my-volume-style.yaml master.md
+```
+
+Then in effect the **collection-setup** and master's *#resources* objects are spread out between the parent pandoc process's internal state (hodling various *#resources* references given by the defaults `my-volume-style.yaml`, and parameters for pandoc generation) and the filter state (including the Pandoc object to which the filter is applied). 

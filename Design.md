@@ -364,3 +364,29 @@ Pandoc -L make.lua master.md -M format=’pdf,html’ -M only-offprint=1 -M outp
 
 If we have a good command syntax we may put the functionality of `make` inside `collection.lua`.
 
+# A functional approach to the design
+
+Primitives in italic, defined objects in bold. `[` ... `]` is map, plural means a list (e.g. **sources** is a list of *source* objects).  `->` a function, arguemnts separated by commas. *#resource* is a reference to an *resource* object rather than the object itself. 
+
+*User provided*: 
+
+* *text*: some article text. 
+* *biblio*, *media*: bibliography database and other media for an article.
+* *metadata*: metadata for an article or volume. 
+* *resources*: filters, templates, CSL styles, converters and the like. Typically volume-independent, located outside the volume folder, used to turned **sources** into outputs.
+* *blocks*: Pandoc AST blocks, e.g. RawBlock or a list of Para, imported in the main document to ultimately generate outputs.
+* *abstract doc*: Pandoc AST document, containing *metadata* and *blocks*.
+* *outputs*: outputs, e.g. PDF, html.
+* **source** = `[` *metadata*, *text*, *biblio*, *media* `]`. Article source.
+* **master** = `[` **collection-setup**, *#resources*, *metadata*, **chapters** `]`. Volume description. We're thinking of a master as having one output (the 'default' output), but **command** objects (below) can transform it into a master that generates other outputs.
+* **collection-setup** = *#resources*, *metadata, **chapters** `->` *blocks* -> *output*. 
+* **chapter** = `[` **source-setup**, *#resources*, **source** `]`
+* **source-setup** = *#resources*, **source** -> *blocks*
+* **command** = **master** `->` **master**. A command can change the **collection-setup** and **source-setups** in a **master** to generate other outputs. Formally, we get a new **master** object. 
+
+The generation of one document works like this. Given a **master**, apply **collection-setup** to *#resources*, *metadata*, **chapters**, and get a function *F* from *blocks* to *output*. For each **chapter** in **chapters**, apply **source-setup** to *#resources*, **source** to get *blocks*. Apply *F* to the *blocks* and you get the output. 
+
+A messy feature: **chapters** used twice. Not sure about the right type for collection-setup. 
+
+
+

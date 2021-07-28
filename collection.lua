@@ -148,28 +148,27 @@ function import_chapters(doc, tempyaml_dir)
 
 		-- import to blocks in the required mode
 
-		local blocks = pandoc.List:new()
+
+		local arguments = pandoc.List:new({sourcepath})
+
+		if defaults then 
+			arguments:extend({'-d', defaults})
+		end
+		if tempyaml then 
+			arguments:extend({'-d', tempyaml_filepath})
+		end
 
 		if mode == 'native' then
 
-			local arguments = pandoc.List:new({sourcepath, '-t', 'json'})
-
-			if defaults then 
-				arguments:extend({'-d', defaults})
-			end
-			if tempyaml then 
-				arguments:extend({'-d', tempyaml_filepath})
-			end
-
+			arguments:extend({'-t', 'json'})
 			local result = pandoc.read(pandoc.pipe('pandoc', arguments, ''), 'json')
-
 			doc.blocks:extend(result.blocks)
 
 		else -- mode = 'raw'
 
-			local arguments = {}
-
-			-- ... TO BE CONTINUED
+			arguments:extend({'-t', FORMAT})
+			local result = pandoc.pipe('pandoc', arguments, '')
+			doc.blocks:insert(pandoc.RawBlock(FORMAT, result))
 
 		end
 

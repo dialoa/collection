@@ -4,7 +4,7 @@ volumes and journal issues in Pandoc's markdown
 @author Julien Dutant <julien.dutant@kcl.ac.uk>
 @copyright 2021 Julien Dutant
 @license MIT - see LICENSE file for details.
-@release 0.1
+@release 0.2
 ]]
 
 -- # Filter settings
@@ -12,10 +12,11 @@ volumes and journal issues in Pandoc's markdown
 -- # Global variables
 
 local utils = pandoc.utils
+local system = pandoc.system
 local path = require('pandoc.path')
 
 local env = {
-	working_directory = pandoc.system.get_working_directory(),
+	working_directory = system.get_working_directory(),
 }
 env.source_folder = path.directory(PANDOC_STATE['input_files'][1])
 
@@ -33,174 +34,184 @@ function message(type, text)
     end
 end
 
---- file_exists: checks whether a file exists at a given filepath
--- @param filepath string the filepath at which the file is
-local function file_exists(filepath)
-  local f = io.open(filepath, 'r')
-  if f ~= nil then
-    io.close(f)
-    return true
-  else
-    return false
-  end
+--- to_json: converts a entire Pandoc document to json
+-- @param doc pandoc Pandoc object
+function to_json(doc)
+
+	-- build the perl script
+	local script = ''
+	-- escape backlashes and double quotes
+  script = script .. [[ s/\\/\\\\/g; ]] .. [[ s/\"/\\"/g; ]]
+	-- wrap the result in an empty element with a RawBlock element
+	local before = '{"pandoc-api-version":[1,22],"meta":{},"blocks":'
+									.. '[{"t":"RawBlock","c":["json","'
+	local after =	'"]}]}'
+	script = script .. [[ s/^/ ]] .. before .. [[ /; ]] 
+		.. [[ s/$/ ]] .. after  .. [[ / ]]
+
+	-- run the filter, catch the result in the `text` field of the first block
+	local result = pandoc.utils.run_json_filter(doc, 'perl', {'-pe', script})
+
+	-- return the string or nil
+	return result.blocks[1].c[2] or nil
+
 end
 
---- read_from_file: use pandoc.read on a file
--- Returns the pandoc document or false if failed to open the file.
--- @param filepath string filepath from the present working directory
--- @param format string Pandoc format specification
-function  read_from_file( filepath, format )
+--- save_meta_as_defaults: converts a Meta or MetaMap to a defaults
+-- file with a `metadata` field. The defaults file can then
+-- be used to import the metadata map into other files.
+-- @param filepath string the file path
+-- @param map a Meta or MetaMap pandoc AST object
+function save_meta_as_defaults(filepath, map)
+	-- build empty doc with meta only
+	-- with the map in `metadata` field
+	local doc = pandoc.Pandoc({}, pandoc.Meta{ metadata = map})
 
-	local fstream = io.input(filepath)
-
-	if fstream then
-		local document = pandoc.read(io.read('a'), format)
-		io.close(fstream)
-		return document
-	else 
-		return false
+	-- convert to json then yaml
+	local yaml = ''
+	local json = to_json(doc)
+	if json then
+		-- convert to markdown with yaml block
+		yaml = pandoc.pipe('pandoc', {'-f', 'json', '-s', '-t', 'markdown'}, json)
+		-- extract yaml
+		yaml = string.match(yaml, "^%-%-%-\n(.*\n)%-%-%-\n+$") or ''
 	end
 
-end
-
-function citeproc(doc, bib)
-
-    -- https://pandoc.org/lua-filters.html#pandoc.utils.run_json_filter
-    -- TODO: set CSL (and other options)
-    return utils.run_json_filter(
-        doc,
-        'pandoc',
-        {
-            '--from=json',
-            '--to=json',
-            '--citeproc',
-            string.format('--bibliography=%s', bib),
-	    '--metadata=reference-section-title:References',
-            '--metadata=link-citations'
-        }
-    )
+	-- save file
+	local file = io.open(filepath, 'w')
+	file:write(yaml)
+	file:close()
 
 end
 
--- # Filter functions
+-- # Collection functions
 
---- Build Collection
---
---
-function build_collection(doc)
+function import_chapters(doc, tempyaml_dir)
 
-for i = 1, #doc.meta.chapters do
-        
-        local chapter = read_from_file(doc.meta.chapters[i].file)
-        if doc.meta.chapters[i].bibliography then
-            local chapter_with_bib = citeproc(chapter, utils.stringify(doc.meta.chapters[i].bibliography))
-            doc.blocks:extend(chapter_with_bib.blocks)
-        else
-            doc.blocks:extend(chapter.blocks)
-        end
-    
-    end
-    
-    return(doc)	
+	-- do we have a tempyaml directory? if yes, build it
+	local tempyaml = false
+	local tempyaml_filepath = ''
+	if tempyaml_dir then 
+		tempyaml = true
+		tempyaml_filepath = tempyaml_dir .. path.separator .. 'metadata.yaml'
+		local map = { global = doc.meta.global }
+		save_meta_as_defaults(tempyaml_filepath, map)
+	end
 
-end
+  -- what is the default import mode?
+	local default_mode = 'native'
+	if doc.meta.import and doc.meta.import['mode'] then
+		str = utils.stringify(doc.meta.import['mode'])
+		if str == 'native' or str == 'raw' then
+			mode = str
+		end
+	end
 
---- Import the metadata from all chapters
--- @param meta document's metadata with a chapters MetaList field
-local function import_chapters_meta(meta)
-	
-	-- prepare the new list
-	local chapters = pandoc.List:new()
+	-- is there a default defaults file?
+	local default_defaults = nil
+	if doc.meta.import and doc.meta.import['defaults'] then
+		default_defaults = utils.stringify(doc.meta.import['defaults'])
 
-	for i = 1, #meta.chapters do
+	end
 
-		local chapter = {}
+	-- DEBUG: display the temp yaml file
+	-- local file = io.open(tempyaml_filepath, 'r')
+	-- print(file:read('a'))
+	-- file:close()
 
-		-- if the chapter entry is MetaInlines or MetaBlocks,
-		-- we treat it as raw content
-		if meta.chapters[i].t == 'MetaInlines' 
-			or meta.chapters[i].t == 'MetaBlocks' then
+	-- go through the list, import each item
+	for _,item in ipairs(doc.meta.imports) do
 
-				-- create the type and content fields
-				chapter.type = 'Raw'
-				chapter.content = meta.chapters[i]
+		-- @TODO check item is a map!
 
-				chapters:insert(pandoc.MetaMap(chapter))
-
-		-- if instead the chapter entry is a MetaMap with a "file" value
-		-- we search for the file and merge the metadata		
-		elseif meta.chapters[i].t == 'MetaMap' and 
-			meta.chapters[i].file then
-
-				local filepath = utils.stringify(meta.chapters[i].file)
-				local filepath_from_pwd = path.join({env.source_folder,filepath})
-				local format = 'markdown'
-				if meta.chapters[i].format then
-					format = utils.stringify(meta.chapters[i].format)
-				end
-
-				-- get the chapter file metadata if it exists
-				if not file_exists(filepath_from_pwd) then
-					message('WARNING', 'File not found for entry #' .. i 
-						.. 'in chapters.')
-				else
-					local chapter_doc = read_from_file(filepath_from_pwd, format)
-					chapter = chapter_doc.meta
-				end
-
-				-- overwrite the metadata from the chapter file with
-				-- any meta-data provided in the collection source
-				for key,value in pairs(meta.chapters[i]) do
-					chapter[key] = value
-				end
-
-				-- add the file and type fields
-				chapter.file = pandoc.MetaString(filepath)
-				chapter.type = 'File'
-
-				chapters:insert(pandoc.MetaMap(chapter))
-
-		-- otherwise warning that we couldn't make sense of the chapter entry
+		-- get filepath, give up this item if none
+		if item.file then
+			sourcepath = utils.stringify(item.file)
 		else
+			goto continue
+		end
 
-			message('WARNING', 'Entry #' .. i .. " in chapters couldnt be processed.")
+		-- use the default import mode unless overriden
+		local mode = default_mode
+		if item.mode then
+			local str = utils.stringify(item.mode)
+			if str == 'native' or str == 'raw' then
+				mode = str
+			end
+		end
+
+		-- use the default defaults file unless overriden
+		local defaults = default_defaults
+		if item.defaults then
+			defaults = utils.stringify(item.defaults)
+		end
+
+		-- import to blocks in the required mode
+
+		local blocks = pandoc.List:new()
+
+		if mode == 'native' then
+
+			local arguments = pandoc.List:new({sourcepath, '-t', 'json'})
+
+			if defaults then 
+				arguments:extend({'-d', defaults})
+			end
+			if tempyaml then 
+				arguments:extend({'-d', tempyaml_filepath})
+			end
+
+			local result = pandoc.read(pandoc.pipe('pandoc', arguments, ''), 'json')
+
+			doc.blocks:extend(result.blocks)
+
+		else -- mode = 'raw'
+
+			local arguments = {}
+
+			-- ... TO BE CONTINUED
 
 		end
 
+		:: continue ::
 	end
 
-	meta.chapters = pandoc.MetaList(chapters)
-	return(meta)
+	return doc
 
 end
 
---- get_options: Read options from document's metadata
-local function get_options(meta)
-	-- no options to provide at the moment
-end
+function build(doc)
 
+	if not doc.meta.imports then
+		message('INFO', "No `imports` field in ".. PANDOC_STATE['input_files'][1] 
+			.. ", nothing to import.")
+		return nil
+	end
+
+	-- ensure doc.meta.imports is a list
+	if doc.meta.imports ~= 'MetaList' then
+		doc.meta.imports = pandoc.MetaList(doc.meta.imports)
+	end
+
+	-- if there is global metadata to be passed, 
+	-- create a yaml for it in a temp directory
+	if doc.meta.global and doc.meta.global.t == 'MetaMap' then
+		system.with_temporary_directory('metadatayaml', function(tmpdir)
+				import_chapters(doc, tmpdir)
+			end)
+	else
+		import_chapters(doc)
+	end
+
+	return doc
+
+end
 
 --- Main filter
--- Build a collection provided we have a list of chapters: get
--- options, merge meta-data, build collection. 
 return {
 	{
 		Pandoc = function(doc)
-			if doc.meta.chapters and doc.meta.chapters.t == 'MetaList' then
-				get_options(doc.meta)
-				doc.meta = import_chapters_meta(doc.meta)
-				if doc.meta.collection then
-					if doc.meta.collection.title then 
-						doc.meta.title = doc.meta.collection.title 
-					end
-					if doc.meta.collection.author then
-						doc.meta.author = doc.meta.collection.author
-					end 
-				end
-				return build_collection(doc)
-			else 
-				message('WARNING', 'No chapters found, no collection to build.')
-			end
+			return build(doc)
 		end
 	}
 }

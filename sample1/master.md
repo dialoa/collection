@@ -1,10 +1,18 @@
 ---
-collection:
-	title: My collection
-	editor: Caesar, Julius
-chapters:
-- file: chapter1.json
-  format: json
-  author: John Doe
+title: My collection
+global: 
+  volume: 12
+  date: 'July 2021'
+  editor: Caesar, Julius
+import:
+  mode: native
+  defaults: resources/chapter
+imports:
+- file: chapter1.md
 - file: chapter2.md
+  mode: raw
 ---
+
+# Title page
+
+These are some blocks written in the master doc itself.

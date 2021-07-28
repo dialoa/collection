@@ -1,3 +1,10 @@
-Collection: $collection$
+\documentclass{book}
 
-Collection.title: $collection.title$
+$if(title)$
+\title{$title$}
+$endif$
+\author{$for(author)$$author$$sep$ \and $endfor$}
+\begin{document}
+\maketitle
+$body$
+\end{document}

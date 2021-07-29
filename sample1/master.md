@@ -8,7 +8,9 @@ import:
   mode: native
   defaults: resources/chapter
 imports:
-- file: chapter1.md
+- file: preface.md
+  defaults: resources/preface
+- chapter1.md
 - file: chapter2/chap-master.md
   mode: raw
 ---

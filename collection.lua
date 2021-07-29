@@ -18,7 +18,7 @@ local path = require('pandoc.path')
 local env = {
 	working_directory = system.get_working_directory(),
 }
-env.source_folder = path.directory(PANDOC_STATE['input_files'][1])
+env.input_folder = path.directory(PANDOC_STATE['input_files'][1])
 
 -- # Helper functions
 
@@ -98,10 +98,10 @@ function import_chapters(doc, tempyaml_dir)
 		save_meta_as_defaults(tempyaml_filepath, map)
 	end
 
-  -- what is the default import mode?
+  -- set a the default import mode
 	local default_mode = 'native'
-	if doc.meta.import and doc.meta.import['mode'] then
-		str = utils.stringify(doc.meta.import['mode'])
+	if doc.meta.collection and doc.meta.collection['mode'] then
+		str = utils.stringify(doc.meta.collection['mode'])
 		if str == 'native' or str == 'raw' then
 			mode = str
 		end
@@ -109,7 +109,7 @@ function import_chapters(doc, tempyaml_dir)
 
 	-- is there a default defaults file?
 	local default_defaults = nil
-	if doc.meta.import and doc.meta.import['defaults'] then
+	if doc.meta.collection and doc.meta.collection['defaults'] then
 		default_defaults = utils.stringify(doc.meta.import['defaults'])
 
 	end
@@ -122,14 +122,31 @@ function import_chapters(doc, tempyaml_dir)
 	-- go through the list, import each item
 	for _,item in ipairs(doc.meta.imports) do
 
-		-- @TODO check item is a map!
-
-		-- get filepath, give up this item if none
-		if item.file then
-			sourcepath = utils.stringify(item.file)
-		else
+		-- if item is a MetaMap but without `file` field, give up
+		-- and move on to the next
+		if item.t == 'MetaMap' and not item.file then
 			goto continue
 		end
+
+		-- if the item isn't a MetaMap, assume it's a filename
+		-- note we're placing this in the AST in case other filters
+		-- applied after this one use it
+		if item.t ~= "MetaMap" then
+			item = pandoc.MetaMap({ file = pandoc.MetaString(utils.stringify(item)) })
+		end
+
+		-- construct prefix needed for some filenames
+		-- source and defaults files are located relative
+		-- the master file. In case pandoc isn't run from the 
+		-- directory of the master file, we need to add that
+		-- prefix to defaults and source filenames
+		local prefix = ''
+		if env.input_folder ~= '' then
+			prefix = env.input_folder .. path.separator
+		end
+
+		-- get the source filepath
+		local source = prefix .. utils.stringify(item.file)
 
 		-- use the default import mode unless overriden
 		local mode = default_mode
@@ -143,13 +160,15 @@ function import_chapters(doc, tempyaml_dir)
 		-- use the default defaults file unless overriden
 		local defaults = default_defaults
 		if item.defaults then
-			defaults = utils.stringify(item.defaults)
+			defaults = prefix .. utils.stringify(item.defaults)
 		end
+
+		-- inform users that we're generating a file
+		message('INFO','Running pandoc on ' .. source)
 
 		-- import to blocks in the required mode
 
-
-		local arguments = pandoc.List:new({sourcepath})
+		local arguments = pandoc.List:new({source})
 
 		if defaults then 
 			arguments:extend({'-d', defaults})

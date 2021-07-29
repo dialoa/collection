@@ -19,7 +19,6 @@ The master file is a markdown document that normally consists of a YAML metadata
 ---
 title: Journal of Serious Studies 
 author: Jane Doe
-defaults: book.yaml
 global:
   volume: 4
   issue: 1
@@ -43,7 +42,7 @@ The overall process is:
 For an illustration, suppose you run the filter on the document above (saved as `master.md`) with the command:
 
 ```bash
-pandoc --lua-filter collection.lua master.md -o book.pdf
+pandoc --lua-filter collection.lua -defaults=book.yaml master.md -o book.pdf
 ```
 
 The filter will use the fields `global`, `collection` and `imports` to build a collection. The filter will build a main document out of all the files mentioned in `imports` in the order listed. The steps are as follows:

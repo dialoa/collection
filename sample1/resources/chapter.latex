@@ -1,0 +1,9 @@
+$if(title)$
+\chapter{$title$}
+$endif$
+
+\textbf{Authors}
+
+$for(author)$$author$$sep$ \and $endfor$
+
+$body$

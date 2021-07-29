@@ -4,7 +4,7 @@ global:
   volume: 12
   date: 'July 2021'
   editor: Caesar, Julius
-import:
+collection:
   mode: native
   defaults: resources/chapter
 imports:

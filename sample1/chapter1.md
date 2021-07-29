@@ -1,7 +1,11 @@
 ---
 title: A first chapter
-author: Cicero, Marcus Tullius
+author: 
+    - Cicero, Marcus Tullius
+    - Cesar, Julius
 ---
+
+This first chapter is inserted in native mode. No template is applied to it. Its title and author are introduced by the `test-filter` filter.
 
 # Abstract
 

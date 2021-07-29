@@ -1,4 +1,2 @@
 standalone: true
 template: ${.}/book
-filters:
-- ${.}/filter.lua

@@ -110,8 +110,7 @@ function import_chapters(doc, tempyaml_dir)
 	-- is there a default defaults file?
 	local default_defaults = nil
 	if doc.meta.collection and doc.meta.collection['defaults'] then
-		default_defaults = utils.stringify(doc.meta.import['defaults'])
-
+		default_defaults = utils.stringify(doc.meta.collection['defaults'])
 	end
 
 	-- DEBUG: display the temp yaml file
@@ -135,18 +134,9 @@ function import_chapters(doc, tempyaml_dir)
 			item = pandoc.MetaMap({ file = pandoc.MetaString(utils.stringify(item)) })
 		end
 
-		-- construct prefix needed for some filenames
-		-- source and defaults files are located relative
-		-- the master file. In case pandoc isn't run from the 
-		-- directory of the master file, we need to add that
-		-- prefix to defaults and source filenames
-		local prefix = ''
-		if env.input_folder ~= '' then
-			prefix = env.input_folder .. path.separator
-		end
-
 		-- get the source filepath
-		local source = prefix .. utils.stringify(item.file)
+		-- note: the source is located relative to the master (input) file
+		local source = path.join({env.input_folder, utils.stringify(item.file)})
 
 		-- use the default import mode unless overriden
 		local mode = default_mode
@@ -158,13 +148,15 @@ function import_chapters(doc, tempyaml_dir)
 		end
 
 		-- use the default defaults file unless overriden
+		-- reminder: default_defaults might be nil
 		local defaults = default_defaults
 		if item.defaults then
-			defaults = prefix .. utils.stringify(item.defaults)
+			defaults = utils.stringify(item.defaults)
 		end
-
-		-- inform users that we're generating a file
-		message('INFO','Running pandoc on ' .. source)
+		-- defaults are located relative to the master (input) file
+		if defaults then
+			defaults = path.join({env.input_folder, defaults})
+		end
 
 		-- import to blocks in the required mode
 
@@ -176,16 +168,30 @@ function import_chapters(doc, tempyaml_dir)
 		if tempyaml then 
 			arguments:extend({'-d', tempyaml_filepath})
 		end
+		if PANDOC_STATE.verbosity == 'INFO' then
+			arguments:insert('--verbose')
+		end
+
+		-- function to inform users of the command we're running
+		local function inform (src, args)
+			local argstring = ''
+			for i = 2, #args do
+				argstring = argstring .. ' ' .. args[i]
+			end
+			message('INFO', 'Running pandoc on ' .. src .. ' with ' .. argstring)
+		end
 
 		if mode == 'native' then
-
+	
 			arguments:extend({'-t', 'json'})
+			inform(source, arguments)
 			local result = pandoc.read(pandoc.pipe('pandoc', arguments, ''), 'json')
 			doc.blocks:extend(result.blocks)
 
 		else -- mode = 'raw'
 
 			arguments:extend({'-t', FORMAT})
+			inform(source, arguments)
 			local result = pandoc.pipe('pandoc', arguments, '')
 			doc.blocks:insert(pandoc.RawBlock(FORMAT, result))
 

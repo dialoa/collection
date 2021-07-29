@@ -1,5 +1,0 @@
-standalone: true
-filters:
-- ${.}/test-filter.lua
-- ${.}/../../collection.lua
-template: ${.}/chapter

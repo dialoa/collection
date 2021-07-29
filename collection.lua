@@ -217,6 +217,21 @@ function build(doc)
 		doc.meta.imports = pandoc.MetaList(doc.meta.imports)
 	end
 
+	-- offprint mode? if yes we reduce the imports list to that file
+	-- if we don't recognize the `offprint` field we erase it
+	-- and warn the user
+	if doc.meta.offprint then
+		message('INFO', 'Trying offprint mode')
+		local index = tonumber(utils.stringify(doc.meta.offprint))
+		if index and doc.meta.imports[index] then
+			doc.meta.imports = pandoc.MetaList(doc.meta.imports[index])
+		else
+			doc.meta.offprint = nil
+			message('WARNING', 'The offprint required (' .. index 
+				.. ") doesn't exist, removing offprint mode.")
+		end
+	end
+
 	-- if there is global metadata to be passed, 
 	-- create a yaml for it in a temp directory
 	if doc.meta.global and doc.meta.global.t == 'MetaMap' then

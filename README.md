@@ -53,26 +53,24 @@ The filter will use the fields `global`, `collection` and `imports` to build a c
   b. The native mode allows you to apply Lua filters to the combined document, after imports. Because the material imported is still Pandoc's internal format, it is readily available for further manipulation by a Lua filter applied to the combined document. That is, the filter will still recognize which elements were quotes, headers, links etc. and modify them easily. By contrast, filters applied to the whole document won't normally touch or peer into material that is already in output format. 
 3. Pandoc then converts the combined document into output format. It applies any options or defaults provided. Here we specicy a defaults file `book.yaml` that can speciy what options, filters, templates Pandoc should use when generating the output document. 
 
-The filter uses three metadata fileds: 
+The filter uses four metadata fileds: 
 
 * `collection` (optional) species options for building the collection: a (default) mode for importing chapters, a (default) defaults file to apply when importing chapters, and others. 
 * `imports` that gives a list of files to be imported, as well as any file-specific import options, e.g. what import mode or defaults to use for a given file.
 * `global` (optional) some metadata that we want to pass to each file before import. This metadata can then be used by filters or templates files to style the elements appropriately. For instance, the defaults file for imported chapters can specify a template `chapter.latex` that uses the metavariables `volume` and `issue` to display volume and issue numbers in each chapter. 
+* `offprint` (optional) to select one import file for offprint
 
-## Background technical details
+# Basic usage
 
-### Paths in Pandoc
+Produce the whole collection as `book.pdf` with the defaults pandoc settings given in `book.yaml`:
 
-* `pandoc.system.get_working_directory()` the present working
-  directory, i.e. folder at which the user was located when they
-  launched pandoc. On MacOS, an absolute path.
-* `PANDOC_STATE.input_files` list of input filepaths from the command
-  line.
-* `PANDOC_STATE.resource_path` Path to search for resources like included images (List of strings). By default just has `.` (the present working directory).
-* `PANDOC_STATE.source_url` Absolute URL or directory of first source file.
-* `PANDOC_STATE.user_data_dir` Directory to search for data files (string or nil)
-* `PANDOC_STATE.output_file` output filepath or nil. 
-* `PANDOC_SCRIPT_FILE`. The name used to involve the filter, can be used
-  to find resources at locations relative to the filter itself.
+```bash
+pandoc -L collection.lua master.md -d book.yaml -o book.pdf
+```
 
- 
+Produce an offprint of the second item in `imports` of `master.md`, using the defaults `offprint.yaml`:
+
+```bash
+pandoc -L collection.lua master.md -d offprint.yaml -offprint=2 -o chapter1.pdf
+```
+

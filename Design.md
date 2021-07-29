@@ -363,3 +363,21 @@ Pandoc -L make.lua master.md -M format=’pdf,html’ -M only-offprint=1 -M outp
 ```
 
 If we have a good command syntax we may put the functionality of `make` inside `collection.lua`.
+
+# Background info
+
+## Paths in Pandoc
+
+* `pandoc.system.get_working_directory()` the present working
+  directory, i.e. folder at which the user was located when they
+  launched pandoc. On MacOS, an absolute path.
+* `PANDOC_STATE.input_files` list of input filepaths from the command
+  line.
+* `PANDOC_STATE.resource_path` Path to search for resources like included images (List of strings). By default just has `.` (the present working directory).
+* `PANDOC_STATE.source_url` Absolute URL or directory of first source file.
+* `PANDOC_STATE.user_data_dir` Directory to search for data files (string or nil)
+* `PANDOC_STATE.output_file` output filepath or nil. 
+* `PANDOC_SCRIPT_FILE`. The name used to involve the filter, can be used
+  to find resources at locations relative to the filter itself.
+
+ 

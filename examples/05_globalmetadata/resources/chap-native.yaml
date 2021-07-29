@@ -1,0 +1,2 @@
+filters:
+- ${.}/chap-native-formatter.lua

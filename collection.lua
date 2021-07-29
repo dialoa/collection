@@ -103,7 +103,7 @@ function import_chapters(doc, tempyaml_dir)
 	if doc.meta.collection and doc.meta.collection['mode'] then
 		str = utils.stringify(doc.meta.collection['mode'])
 		if str == 'native' or str == 'raw' then
-			mode = str
+			default_mode = str
 		end
 	end
 

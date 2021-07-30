@@ -88,7 +88,7 @@ end
 
 function import_chapters(doc, tempyaml_dir)
 
-	-- do we have a tempyaml directory? if yes, build it
+	-- do we have a tempyaml directory? if yes, build the temp yaml file
 	local tempyaml = false
 	local tempyaml_filepath = ''
 	if tempyaml_dir then 
@@ -98,7 +98,12 @@ function import_chapters(doc, tempyaml_dir)
 		save_meta_as_defaults(tempyaml_filepath, map)
 	end
 
-  -- set a the default import mode
+	-- DEBUG: display the temp yaml file
+	-- local file = io.open(tempyaml_filepath, 'r')
+	-- print(file:read('a'))
+	-- file:close()
+
+  	-- set a default import mode
 	local default_mode = 'native'
 	if doc.meta.collection and doc.meta.collection['mode'] then
 		str = utils.stringify(doc.meta.collection['mode'])
@@ -113,32 +118,26 @@ function import_chapters(doc, tempyaml_dir)
 		default_defaults = utils.stringify(doc.meta.collection['defaults'])
 	end
 
-	-- DEBUG: display the temp yaml file
-	-- local file = io.open(tempyaml_filepath, 'r')
-	-- print(file:read('a'))
-	-- file:close()
-
 	-- go through the list, import each item
 	for _,item in ipairs(doc.meta.imports) do
 
-		-- if item is a MetaMap but without `file` field, give up
-		-- and move on to the next
+		-- set the filename
+		-- if `item` is a MetaMap without `file` field we can't make sense of it
+		-- so move on to next item
 		if item.t == 'MetaMap' and not item.file then
 			goto continue
 		end
-
 		-- if the item isn't a MetaMap, assume it's a filename
-		-- note we're placing this in the AST in case other filters
-		-- applied after this one use it
+		-- nb, instead of merely storing the filename in source
+		-- we fix the AST document's metadata. (Given Lua passes
+		-- tables by references, modifying `item` modifies `doc`.)
+		-- This is safer for future uses and filters run after this one.
 		if item.t ~= "MetaMap" then
 			item = pandoc.MetaMap({ file = pandoc.MetaString(utils.stringify(item)) })
 		end
 
-		-- get the source filepath
-		-- note: the source is located relative to the master (input) file
-		local source = path.join({env.input_folder, utils.stringify(item.file)})
-
-		-- use the default import mode unless overriden
+		-- set the mode and defaults
+		-- use the default import mode unless overridden for this item
 		local mode = default_mode
 		if item.mode then
 			local str = utils.stringify(item.mode)
@@ -146,22 +145,27 @@ function import_chapters(doc, tempyaml_dir)
 				mode = str
 			end
 		end
-
 		-- use the default defaults file unless overriden
-		-- reminder: default_defaults might be nil
+		-- recall that default_defaults might be nil
 		local defaults = default_defaults
 		if item.defaults then
 			defaults = utils.stringify(item.defaults)
 		end
-		-- defaults are located relative to the master (input) file
-		if defaults then
-			defaults = path.join({env.input_folder, defaults})
+
+		-- construct the source and default filepaths
+		-- note: they are located relative to the master (input) file
+		local source = utils.stringify(item.file)
+		if path.is_relative(source) then
+			source = path.join({ env.input_folder, source} )
+		end
+		if defaults and path.is_relative(defaults) then
+			defaults = path.join({ env.input_folder, defaults })
 		end
 
 		-- import to blocks in the required mode
 
+		-- 	build the list of command line arguments
 		local arguments = pandoc.List:new({source})
-
 		if defaults then 
 			arguments:extend({'-d', defaults})
 		end
@@ -172,7 +176,7 @@ function import_chapters(doc, tempyaml_dir)
 			arguments:insert('--verbose')
 		end
 
-		-- function to inform users of the command we're running
+		-- 	function to inform users of the command we're running
 		local function inform (src, args)
 			local argstring = ''
 			for i = 2, #args do
@@ -181,6 +185,7 @@ function import_chapters(doc, tempyaml_dir)
 			message('INFO', 'Running pandoc on ' .. src .. ' with ' .. argstring)
 		end
 
+		--	run the commands for the required mode
 		if mode == 'native' then
 	
 			arguments:extend({'-t', 'json'})
@@ -218,7 +223,7 @@ function build(doc)
 	end
 
 	-- offprint mode? if yes we reduce the imports list to that file
-	-- if we don't recognize the `offprint` field we erase it
+	-- if we can't make sense of the `offprint` field we erase it
 	-- and warn the user
 	if doc.meta.offprint then
 		message('INFO', 'Trying offprint mode')
@@ -228,7 +233,7 @@ function build(doc)
 		else
 			doc.meta.offprint = nil
 			message('WARNING', 'The offprint required (' .. index 
-				.. ") doesn't exist, removing offprint mode.")
+				.. ") doesn't exist, cancelling offprint mode.")
 		end
 	end
 

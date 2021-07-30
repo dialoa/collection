@@ -84,24 +84,123 @@ function save_meta_as_defaults(filepath, map)
 
 end
 
+-- # Isolate filter
+--		This filter will be ran on imported document if we need to isolate them
+--		Needs to be a saved as a temporary file to do so
+isolate_filter = [[
+-- # Global variables
+local prefix = ''
+local old_identifiers = pandoc.List:new()
+
+--- get_options: get filter options for document's metadata
+-- @param meta pandoc Meta element
+function get_options(meta)
+
+    if meta['isolate-prefix'] then
+        prefix = pandoc.utils.stringify(meta['isolate-prefix'])
+    end
+
+end
+
+--- process_doc: process the pandoc document
+-- generates a prefix is needed, walk through the document
+-- and adds a prefix to all elements with identifier.
+-- @param pandoc Pandoc element
+-- @TODO handle meta fields that may contain identifiers? abstract
+-- and thanks?
+function process_doc(doc)
+
+    -- generate prefix if needed
+    if prefix == '' then
+        prefix = pandoc.utils.sha1(pandoc.utils.stringify(doc.blocks))
+    end
+
+    -- add_prefix function
+    -- do not add prefixes to empty identifiers
+    -- store the old identifiers for fixing the links
+    add_prefix = function (el) 
+        if el.identifier and el.identifier ~= '' then
+            old_identifiers:insert(el.identifier)
+            local new_identifier = prefix .. el.identifier
+            el.identifier = new_identifier
+            return el
+        end
+    end
+
+    -- apply the function to all elements with identifier
+    local div = pandoc.walk_block(pandoc.Div(doc.blocks), {
+        Span = add_prefix,
+        Link = add_prefix,
+        Image = add_prefix,
+        Code = add_prefix,
+        Div = add_prefix,
+        Header = add_prefix,
+        Table = add_prefix,
+        CodeBlock = add_prefix,        
+    })
+    doc.blocks = div.content
+
+    local add_prefix_to_link = function (link)
+        if link.target:sub(1,1) == '#' 
+          and old_identifiers:find(link.target:sub(2,-1)) then
+            new_target = '#' .. prefix .. link.target:sub(2,-1)
+            link.target = new_target
+            return link 
+        end
+    end
+
+    div = pandoc.walk_block(pandoc.Div(doc.blocks), {
+        Link = add_prefix_to_link
+    })
+    doc.blocks = div.content
+
+    -- return the result
+    return doc
+
+end
+
+-- # Main filter
+return {
+    {
+        Meta = get_options,
+        Pandoc = process_doc
+    }
+}
+]]
+
 -- # Collection functions
 
-function import_chapters(doc, tempyaml_dir)
+function import_chapters(doc, tmpdir)
 
-	-- do we have a tempyaml directory? if yes, build the temp yaml file
+	-- if a yaml file is needed, build it
 	local tempyaml = false
 	local tempyaml_filepath = ''
-	if tempyaml_dir then 
+	if doc.meta.global and doc.meta.global.t == 'MetaMap' then 
 		tempyaml = true
-		tempyaml_filepath = tempyaml_dir .. path.separator .. 'metadata.yaml'
+		tempyaml_filepath = path.join( { tmpdir , 'metadata.yaml' })
 		local map = { global = doc.meta.global }
 		save_meta_as_defaults(tempyaml_filepath, map)
 	end
-
+	 
 	-- DEBUG: display the temp yaml file
 	-- local file = io.open(tempyaml_filepath, 'r')
 	-- print(file:read('a'))
 	-- file:close()
+
+	-- if the `isolate.lua` filter is needed, save it as tmp file
+	-- and get any custom isolate filter specified
+	local needs_isolate_filter = false
+	if doc.meta.collection and doc.meta.collection['needs-isolate-filter'] then
+		needs_isolate_filter = true
+		isolate_prefix_pattern = "c%d-"
+		if doc.meta.collection['isolate-prefix-pattern'] then
+			isolate_prefix_pattern = utils.stringify(doc.meta.collection['isolate-prefix-pattern'])
+		end
+		isolate_filter_filepath = path.join( { tmpdir , 'isolate.lua' })
+		local file = io.open(isolate_filter_filepath, 'w')
+		file:write(isolate_filter)
+		file:close()
+	end
 
   	-- set a default import mode
 	local default_mode = 'native'
@@ -119,7 +218,9 @@ function import_chapters(doc, tempyaml_dir)
 	end
 
 	-- go through the list, import each item
-	for _,item in ipairs(doc.meta.imports) do
+	--		i will be used as unique identifier if needed
+	for i = 1, #doc.meta.imports do
+		item = doc.meta.imports[i]
 
 		-- set the filename
 		-- if `item` is a MetaMap without `file` field we can't make sense of it
@@ -165,15 +266,30 @@ function import_chapters(doc, tempyaml_dir)
 		-- import to blocks in the required mode
 
 		-- 	build the list of command line arguments
+		--		source file
 		local arguments = pandoc.List:new({source})
+		--		add source directory to resource path
+		--		in case biblos, images, are specified relative to it
+		arguments:extend({'--resource-path', path.directory(source)})
+		--		add defaults and tempyaml if provided
 		if defaults then 
 			arguments:extend({'-d', defaults})
 		end
 		if tempyaml then 
 			arguments:extend({'-d', tempyaml_filepath})
 		end
+		--		run the isolate filter with a prefix
+		if (doc.meta.collection.isolate and item.isolate ~= false)
+			or item.isolate then
+			arguments:extend({'-L', isolate_filter_filepath, 
+			'-M', 'isolate-prefix='.. string.format(isolate_prefix_pattern, i) })	
+		end
+
+		--		match verbosity
 		if PANDOC_STATE.verbosity == 'INFO' then
 			arguments:insert('--verbose')
+		elseif PANDOC_STATE.verbosity == 'ERROR' then
+			arguments:insert('--quiet')
 		end
 
 		-- 	function to inform users of the command we're running
@@ -211,13 +327,13 @@ end
 
 function build(doc)
 
+	-- check doc.meta.imports
+	-- do nothing if it doesn't exist, ensure it's a list otherwise
 	if not doc.meta.imports then
 		message('INFO', "No `imports` field in ".. PANDOC_STATE['input_files'][1] 
 			.. ", nothing to import.")
 		return nil
 	end
-
-	-- ensure doc.meta.imports is a list
 	if doc.meta.imports ~= 'MetaList' then
 		doc.meta.imports = pandoc.MetaList(doc.meta.imports)
 	end
@@ -237,10 +353,27 @@ function build(doc)
 		end
 	end
 
-	-- if there is global metadata to be passed, 
-	-- create a yaml for it in a temp directory
+	-- do we need a temporary directory?
+	--   either to pass metadata yaml, or to have the `isolate.lua` filter 
+	local needs_tmpdir = false
 	if doc.meta.global and doc.meta.global.t == 'MetaMap' then
-		system.with_temporary_directory('metadatayaml', function(tmpdir)
+		needs_tmpdir = true
+	elseif doc.meta.collection and doc.meta.collection.isolate then
+		needs_tmpdir = true
+		doc.meta.collection['needs-isolate-filter'] = true -- reused later
+	else
+		for _,item in ipairs(doc.meta.imports) do
+			if item.isolate then
+				needs_tmpdir = true
+				doc.meta.collection['needs-isolate-filter'] = true
+				break
+			end
+		end
+	end
+
+	-- create a tmp directory if needed and import chapters
+	if needs_tmpdir then
+		system.with_temporary_directory('collection', function(tmpdir)
 				import_chapters(doc, tmpdir)
 			end)
 	else

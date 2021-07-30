@@ -1,0 +1,4 @@
+filters:
+- citeproc
+metadata:
+  link-citations: true

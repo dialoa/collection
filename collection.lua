@@ -279,7 +279,7 @@ function import_chapters(doc, tmpdir)
 			arguments:extend({'-d', tempyaml_filepath})
 		end
 		--		run the isolate filter with a prefix
-		if (doc.meta.collection.isolate and item.isolate ~= false)
+		if (doc.meta.collection and doc.meta.collection.isolate and item.isolate ~= false)
 			or item.isolate then
 			arguments:extend({'-L', isolate_filter_filepath, 
 			'-M', 'isolate-prefix='.. string.format(isolate_prefix_pattern, i) })	

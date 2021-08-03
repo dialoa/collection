@@ -1,0 +1,24 @@
+\chapterauthor{$if(author/allbutlast)$$for(author/allbutlast)$$it$$sep$, $endfor$ and $for(author/last)$$it$$endfor$$else$$for(author)$$it$$endfor$$endif$}
+$if(doi)$\doi{$doi$}$endif$
+\chapter[$if(shorttitle)$$shorttitle$$else$$title$$endif$]{$title$}
+
+\addxcontentsline{kcc}{chapter}{$if(author/allbutlast)$$for(author/allbutlast)$$it$$sep$, $endfor$ and $for(author/last)$$it$$endfor$$else$$for(author)$$it$$endfor$$endif$, $title$}
+\addxcontentsline{koc}{chapter}{$if(author/allbutlast)$$for(author/allbutlast)$$it$$sep$, $endfor$ and $for(author/last)$$it$$endfor$$else$$for(author)$$it$$endfor$$endif$, $title$}
+\addxcontentsline{kbc}{chapter}{$if(author/allbutlast)$$for(author/allbutlast)$$it$$sep$, $endfor$ and $for(author/last)$$it$$endfor$$else$$for(author)$$it$$endfor$$endif$, $title$}
+
+$if(abstract)$
+\begin{abstract}
+$abstract$
+\end{abstract}
+$endif$%
+%
+$body$$if(thanks)$\renewcommand{\thefootnote}{\fnsymbol{footnote}}%
+\footnote[1]{$thanks$}
+
+\renewcommand{\thefootnote}{\arabic{footnote}}$endif$
+
+
+
+$for(include-after)$
+$include-after$
+$endfor$

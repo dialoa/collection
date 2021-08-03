@@ -1,0 +1,6 @@
+standalone: true
+template: ${.}/chapter.latex
+filters:
+- citeproc
+metadata:
+  link-citations: true

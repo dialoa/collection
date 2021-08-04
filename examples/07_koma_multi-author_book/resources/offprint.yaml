@@ -1,0 +1,15 @@
+standalone: true
+pdf-engine: lualatex
+template: ${.}/offprint.latex
+filters:
+- ${.}/offprint.lua
+number-sections: true
+# csl: ${.}/apa-style.csl
+# pandoc metadata options
+metadata:
+  collection:
+    mode: raw
+    isolate: true
+    defaults: resources/chapter.yaml
+  link-citations: true 
+  lang: en

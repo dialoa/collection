@@ -14,7 +14,7 @@ volumes and journal issues in Pandoc's markdown
 local utils = pandoc.utils
 local system = pandoc.system
 local path = require('pandoc.path')
-
+--	% environement variables
 local env = {
 	working_directory = system.get_working_directory(),
 }
@@ -240,7 +240,7 @@ function import_chapters(doc, tmpdir)
 	-- file:close()
 
 	-- if the `isolate.lua` filter is needed, save it as tmp file
-	-- and get any custom isolate filter specified
+	-- and get the user-specified custom isolate prefix if any
 	local needs_isolate_filter = false
 	if doc.meta.collection and doc.meta.collection['needs-isolate-filter'] then
 		needs_isolate_filter = true
@@ -287,6 +287,7 @@ function import_chapters(doc, tmpdir)
 		-- This is safer for future uses and filters run after this one.
 		if item.t ~= "MetaMap" then
 			item = pandoc.MetaMap({ file = pandoc.MetaString(utils.stringify(item)) })
+			doc.meta.imports[i] = item
 		end
 
 		-- set the mode and defaults
@@ -426,10 +427,10 @@ function build(doc)
 	-- create a tmp directory if needed and import chapters
 	if needs_tmpdir then
 		system.with_temporary_directory('collection', function(tmpdir)
-				import_chapters(doc, tmpdir)
+				doc = import_chapters(doc, tmpdir)
 			end)
 	else
-		import_chapters(doc)
+		doc = import_chapters(doc)
 	end
 
 	return doc

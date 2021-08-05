@@ -3,79 +3,168 @@ title: "Collection - generating collections with Pandoc"
 author: "Julien Dutant"
 ---
 
-A Lua filter for [Pandoc](https://pandoc.org) for building complex multi-part documents, such as academic journalss, multi-author collections, or documents with multiple styles and multiple output formats. 
+Collection for [Pandoc](https://pandoc.org) is a [Pandoc Lua filter]
+(https://pandoc.org/lua-filters.html) for building complex multi-part
+documents such as academic journalss, multi-author collections, or
+documents with multiple styles and multiple output formats. 
 
 # Introduction
 
-Call a *collection* is a single document build for from document parts in multiple source files. [Pandoc](pandoc.org) can already build collections:
+Call a *collection* is a single document build for from document parts
+in multiple source files. [Pandoc](pandoc.org) can already build
+collections:
 
-```bash
-pandoc source1.md source2.md -o collection.html
+```bash pandoc source1.md source2.md source3.md -o collection.html
 ```
 
-Its ability is limited though: sources must be specified on the command line, they are concatenated as if in a single markdown document and their metadata (if any) is merged.^[The merging behaviour is simple: if two sources have the same key the latter one prevails. This is sometimes counterintuitive, e.g. with the `header-includes` field. See [here](https://github.com/jgm/pandoc/issues/5881) and [here](https://groups.google.com/g/pandoc-discuss/c/N6WhlmSPXbY) for instance.] The only option is [`--file-scope` option](https://pandoc.org/MANUAL.html#option--file-scope) that ensures that footnotes with the same name in different files work as excepted, but prevents links across files (this is like the `isolate` option of this filter). 
+This process is limited though: sources must be specified on the
+command line, they are concatenated as if in a single markdown
+document and their metadata (if any) is merged.^[The merging
+behaviour is simple: if two sources have the same key the latter one
+prevails. This is sometimes counterintuitive, e.g. with the
+`header-includes` field. See [here]
+(https://github.com/jgm/pandoc/issues/5881) and [here]
+(https://groups.google.com/g/pandoc-discuss/c/N6WhlmSPXbY) for
+instance.] The only option is [`--file-scope` option]
+(https://pandoc.org/MANUAL.html#option--file-scope) that ensures that
+footnotes with the same references in different markdown files work
+as excepted, but prevents links across files (similar to Collection's
+`isolate` option). 
 
-This filter provides advanced control on building collections. 
+Collection provides advanced control on building collections. 
 
-1. *Master files* are used to describe collections. These are easier to read and edit than command lines or Makefiles. 
-2. *Pandoc is run on source files before import* (default, can be deactivated on a per-source basis). This means that specific Pandoc settings ([defaults](https://pandoc.org/MANUAL.html#default-files), [templates](https://pandoc.org/MANUAL.html#templates) and [filters](https://pandoc.org/MANUAL.html#option--filter)) can be applied to sources before import, and different ones to different sources.
-3. *Metadata can be passed from the main document to its sources, and gathered from the sources into the main document*. This allows styling parts in light of the main document (e.g., displaying volume information in chapters) and gathering information from the parts into the main (e.g., gathering bibliographic database from the sources or `header-includes` blocks). 
-4. *Recursive* collection-building is possible. That is, you can build collections of collections of ... collections of sources. 
-5. An *offprint* mode is provided that outputs only one of the collection's sources. This feature is meant for academic journals, to allow you to output an entire issue as well as each article separately. 
+1. *Master files* are used to describe collections. These are easier
+to read and edit than command lines or Makefiles. 2. *Pandoc is run
+on source files before import* (default, can be deactivated on a
+per-source basis). This means that specific Pandoc settings (
+[defaults](https://pandoc.org/MANUAL.html#default-files), [templates]
+(https://pandoc.org/MANUAL.html#templates) and [filters]
+(https://pandoc.org/MANUAL.html#option--filter)) can be applied to
+sources before import, and different ones to different sources.
+3. *Metadata can be passed from the main document to its sources, and
+gathered from the sources into the main document*. This allows
+styling parts in light of the main document (e.g., displaying volume
+information in chapters) and gathering information from the parts
+into the main (e.g., gathering bibliographic database from the
+sources or `header-includes` blocks). 4. *Recursive*
+collection-building is possible. That is, you can build collections
+of collections of ... collections of sources. 5. An *offprint* mode
+is provided that outputs only one of the collection's sources. This
+feature is meant for academic journals, to allow you to output an
+entire issue as well as each article separately. 
 
-A note of the filter's design principles: 
+Collection's design principles: 
 
-1. *Power*. We try to cater to broad range of workflows. You can convert sources to output before or after importing them into the main document; convert some before and others after; apply different Pandoc defaults and filters to different parts and to the whole document. You can pass metadata from the master file to the sources, and different metadata to different sources. You can use the filter recursively to build collections of collections.
-2. *Freedom*. The filter doesn't constrain your folder structure, your input or output formats, how you handle citations, etc. 
-4. *Pure Pandoc*. Only Pandoc should be needed to generate a collection. This means that once a set-up is designed (collection options, templates and filters), people can use it to build collection without the need to master any technology beyond the basic terminal commands to launch Pandoc. 
-5. *Pandoc skills required*. No ready-made set-ups are included, at this stage at least. You'll have to build your own settings. To design a collection set-up typically you'll need to ypically need to be familiar with Pandoc's defaults and metadata blocks (easy) and possibly write Pandoc templates and/or Lua filters (harder). 
-6. *Extensibility*. The filter is meant to play well with pretty much any other Pandoc-based tool you might want to use, e.g. filters, templates, defaults.^[Exception: at this stage it can only run `pandoc` on source files, so you couldn't run a pandoc wrapper on them instead.] The code is well commented so you can modify it for your own purposes. 
-7. *Speed is secondary*. Power and clear design is priviledged over speed. Since the filter typically runs Pandoc on each source (and sometimes twice, if it needs to read their metadata), a document with 10 sources will be processed about 10 times slower than if you used Pandoc's own file concatenation. That being said, Pandoc is fast, so the extra time is negligeable when compared to e.g. the LaTeX run needed to output a PDF. I recommend running it with Pandoc's `--verbose` option to follow the building progress and using the *offprint* mode to print out one source only when you're working on one part only. 
+1. *Power*. Cater for a broad range of workflows. You can convert
+sources to output before or after importing them into the main
+document; convert some before and others after; apply different
+Pandoc defaults and filters to different parts and to the whole
+document. You can pass metadata from the master file to the sources,
+and different metadata to different sources. You can use the filter
+recursively to build collections of collections. 2. *Freedom*. Don't
+constrain the user's folder structure, choice of input or output
+formats, styles, citation handling, etc. 4. *Pure Pandoc*. Handle all
+with Pandoc. Once a collection set-up is designed, people can use it
+without the need to master any technology beyond the simplest Pandoc
+commands. No need for them to master GitHub, Python scripts,
+Makefiles etc. 5. *Pandoc skills required*. No ready-made setups
+provided (at this stage). Designing a collection set-up typically
+requires familiarity with Pandoc's defaults and metadata blocks
+(easy) and possibly Pandoc templates and/or Lua filters
+(harder). 6. *Pandoc ecosystem*. Maximize compatibility with existing
+Pandoc-based tools such as [lua filters]
+(https://github.com/pandoc/lua-filters), [other filters]
+(https://github.com/jgm/pandoc/wiki/Pandoc-Filters), [templates]
+(https://github.com/jgm/pandoc/wiki/User-contributed-templates), and
+[more](https://github.com/jgm/pandoc/wiki). , Exception: at this
+stage it can only run `pandoc` on source files, so you couldn't run a
+pandoc wrapper on them instead. The code is well commented so you can
+modify it for your own purposes. 7. *Speed is secondary*. Priviledge
+power and clear design over speed. This is mostly a production tool,
+for final output. At writing stage the offprint mode can be used for
+faster output of parts of the document. When building a large
+document, the `--verbose` mode allows you to follow building
+progress. 
+
+On speed. Collection typically runs Pandoc on each source
+(sometimes twice, if it needs to read their metadata) and needs to
+write temporary files to pass metadata around. Hence generating a
+document with 10 sources is about 10 times slower than Pandoc's basic
+collection building mechanism. That being said, Pandoc is fast, so
+the extra time is negligeable compared to e.g. compared to e.g. the
+LaTeX run needed to output a PDF.
 
 # Installation
 
-[Pandoc](https://pandoc.org) must be [installed on your system](https://pandoc.org/installing.html). 
+[Pandoc](https://pandoc.org) must be [installed on your system]
+(https://pandoc.org/installing.html). 
 
-You only need the filter file `collection.lua`. (Here is a [direct link](https://raw.githubusercontent.com/jdutant/collection/main/collection.lua).) Save it somewhere in your system, e.g. in your collection's top folder.
+You only need the filter file `collection.lua`. (Here is a
+[direct link]
+(https://raw.githubusercontent.com/jdutant/collection/main/collection.lua).)
+Save it somewhere in your system, e.g. in your collection's top
+folder.
 
-If you save it in a subfolder `filters` of Pandoc's user data directory, you won't need to provide its path in your Pandoc commands. See [Pandoc's manual](https://pandoc.org/MANUAL.html#option--data-dir) for more on user data directories in Pandoc. 
+If you save it in a subfolder `filters` of Pandoc's user data
+directory, you won't need to provide its path in your Pandoc
+commands. See [Pandoc's manual]
+(https://pandoc.org/MANUAL.html#option--data-dir) for more on user
+data directories in Pandoc. 
 
 # Basic usage
 
 ## Commands
 
-Collections are built  by applying the filter to a master file, e.g.:
+Build collections by applying the filter to a master file, e.g.:
 
 ```bash
 pandoc -L collection.lua master.md -o book.pdf
 ```
 
-This turns the collection described in `master.md` into `book.pdf`. The `-L` flag is an alias for `--lua-filter` and `-o` for `--output`. If you're new to Pandoc: by and large the order of arguments don't matter, so the following works just as well: 
+This turns the collection described in `master.md` into `book.pdf`.
+(The `-L` flag is an alias for `--lua-filter` and `-o` for
+`--output`.) If you're new to Pandoc: by and large the order of
+arguments don't matter, so the following works just as well: 
 
 ```bash
 pandoc --lua-filter collection.lua --output book.pdf master.md
 ```
 
-The above will only work if `master.md` is located in the folder where you run the command, and if Pandoc can find `collection.lua`. With this command Pandoc will find `collection.lua` if it's in the same folder, or in a `filters` subfolder of your [user data directory](https://pandoc.org/MANUAL.html#option--data-dir)). Otherwise you need to specify paths:
+The above will only work if `master.md` is located in the folder where
+you run the command, and if Pandoc can find `collection.lua`. With
+this command Pandoc will find `collection.lua` if it's in the same
+folder, or in a `filters` subfolder of your [user data directory]
+(https://pandoc.org/MANUAL.html#option--data-dir)). Otherwise you
+need to specify paths:
 
 ```bash
 pandoc -L path/to/collection.lua path/to/master.md -o output.pdf
 output.pdf 
 ```
 
-Replacing `path/to/` with suitable paths (if relative, from the directory in which you're executing these commands) for the `collection.lua` and `master.md` files, respectively. For instance, if your terminal is located at a folder with two subfolders, `mycollection` containing the master file `master.md` and `resources` containing the filter file `collection.lua`, and your want to output a file `book.html` in the present folder, you should run: 
+Replacing `path/to/` with suitable paths (if relative, from the
+directory in which you're executing these commands) for the
+`collection.lua` and `master.md` files, respectively. For instance,
+if your terminal is located at a folder with two subfolders,
+`mycollection` containing the master file `master.md` and `resources`
+containing the Collection file `collection.lua`, and your want to
+output a file `book.html` in the present folder, you should run: 
 
 ```bash
 pandoc -L resources/collection.lua mycollection/master.md -o book.html
 ```
 
-You can use any other Pandoc option to control your collection output. For instance, you'll typically want a standalone document, with the `--standalone` or `-s` option:
+You can use any other Pandoc option to control your collection output.
+For instance, you'll typically want a standalone document, with the
+`--standalone` or `-s` option:
 
 ```bash
 pandoc -L collection.lua -s -o book.pdf master.md
 ```
 
-A good practice is to place your options in a [Pandoc *defaults* file](https://pandoc.org/MANUAL.html#default-files). For intsance, saving the following a `book.yaml` next to `master.md`:
+A good practice is to place your options in a [Pandoc *defaults* file]
+(https://pandoc.org/MANUAL.html#default-files). For intsance, saving
+the following a `book.yaml` next to `master.md`:
 
 ```yaml
 standalone: true
@@ -90,11 +179,18 @@ And run the command (`-d` is short for `--defaults`):
 pandoc -d book.yaml master.md -o book.pdf
 ```
 
-This will apply the defaults specified to `master.md`: standalone mode, use the LuaLaTeX pdf engine when producing PDFs, and apply the `collection.lua` filter. 
+This will apply the defaults specified to `master.md`: standalone
+mode, use the LuaLaTeX pdf engine when producing PDFs, and apply the
+`collection.lua` filter. 
 
 ## Master files
 
-A master files is a markdown file with a [metadata block in `yaml` format](https://pandoc.org/MANUAL.html#extension-yaml_metadata_block). Any text in the body of the document will appear before the imported sources. The only metadata field required is a `imports` field specifying a list of sources:
+A master file is a markdown file with a [metadata block in `yaml`
+format]
+(https://pandoc.org/MANUAL.html#extension-yaml_metadata_block). See
+[below](#yaml-primer) for a brief tutorial on the YAML format. The
+only metadata field required is a `imports` field specifying a list
+of sources:
 
 ```markdown
 ---
@@ -110,9 +206,17 @@ imports:
 This introduction section will appear at the beginning of the collection, followed by the content of `chapter1.md` and `chapter2.md`.
 ```
 
-The metadata block in `YAML` format is between `---` and `---`. The `imports` field specifies source files, to be included in the order listed. The source files are listed in that field, each item in a line starting with a hyphen `- ` (aligned below `imports`, or indented if you wish).
+The metadata block in `YAML` format is between `---` and `---`. The
+`imports` field specifies source files, to be included in the order
+listed. Any text in the document's body will appear before the
+imported sources. The source files are listed in that field, each
+item in a line starting with a hyphen `- ` (aligned below `imports`,
+or indented if you wish).
 
-If sources files are located in other folders, specify their path relative to the master file (or an absolute path). For instance, if the folder containing `master.md` has subfolders for each source, the master file may look like this:
+If sources files are located in other folders, specify their path
+relative to the master file (or an absolute path). For instance, if
+the folder containing `master.md` has subfolders for each source, the
+master file may look like this:
 
 ```yaml
 ---
@@ -125,23 +229,48 @@ imports:
 ---
 ```
 
-By default source files are processed by Pandoc before import. This means that footnotes won't clash: if each `chapter1.md` and `chapter2.md` have a footnote named `[^1]` or `[^idea]` the links will still be correct. Internal links across chapters are still possible, e.g. `as we saw [here](#importantpoint)` in `chapter2.md` can link to `[Point 1]{#importantpoint}` in `chapter1.md`. For more details and options, see [below on the building process](#the-building-process).
+By default source files are run through Pandoc before import. This
+means that footnotes won't clash: if each `chapter1.md` and
+`chapter2.md` have a footnote named `[^1]` or `[^idea]` the links
+will still be correct. Internal links across chapters are still
+possible, e.g. `as we saw [here](#importantpoint)` in `chapter2.md`
+can link to `[Point 1]{#importantpoint}` in `chapter1.md`. For more
+details and options, see [below on the building process]
+(#the-building-process).
 
-The filter also makes use of these metadata fields (and their aliases) if present. (If you're not familiar with the term "map", see the YAML primer below.)
+The filter also makes use of these metadata fields (and their aliases)
+if present. (If you're not familiar with the term "map", see the
+[YAML primer](#yaml-primer) below.)
 
-* `collection`: a map of options to build the collection and offprints.
-* `offprint-setup`: a map of additional options to build offprints (not used when building a collection). 
-* `collection-setup`: a map of additional options to build collections (not used when building an offprint.)
-* `child-metadata` (alias `metadata`): metadata passed to the sources before import. If building a collection of collections, this is only passed to the immediate sources of the collection, not the sources of the sources. 
-* `global-metadata` (alias `global`): metadata passed to the sources in a `global-metadata` field. When building recursively (collections of collections ... of collections of sources), this trickles down to the sources of the sources. 
-* `offprint`. Normally used on the command line only, to switch to offprint mode. 
-* ... and other fields of the form `collection-...` that provide aliases for collection options. These are easier to use  
+* `collection`: a map of options to build the collection and
+  offprints.
+* `offprint-setup`: a map of additional options to build offprints
+  (not used when building a collection). 
+* `collection-setup`: a map of additional options to build
+  collections (not used when building an offprint.)
+* `child-metadata` (alias `metadata`): metadata passed to the sources
+  before import. If building a collection of collections, this is
+  only passed to the immediate sources of the collection, not the
+  sources of the sources. 
+* `global-metadata` (alias `global`): metadata passed to the sources
+  in a `global-metadata` field. When building recursively
+  (collections of collections ... of collections of sources), this
+  trickles down to the sources of the sources. 
+* `offprint`. Normally used on the command line only, to switch to
+  offprint mode. 
+* ... and other fields of the form `collection-...` that provide
+      aliases for collection options, meant to be used on the command
+      line. 
 
-Here is an example of master file using the `collection` field to specify options: 
+A full [list of master fields](#master-file-options) is provided
+below.
+
+Here is an example of master file using the `collection` field to
+specify options: 
 
 ```yaml
 ---
-title: Journal of Serious Studies 
+title: My Journey
 editor: Jane Doe
 collection: 
   mode: raw
@@ -153,13 +282,45 @@ imports:
 ---
 ```
 
-Here two collection options are specified: `defaults` and `mode`. Note the indentation needed to indicate that they are sub-fields of `collection`. (The former specifies a Pandoc defaults file to process the sources before import, the second specifies the `raw` import mode in which sources are converted to output before being imported in the main document. These options and others are explained in more detail below).
+Here two collection options are specified: `defaults` and `mode`. Note
+the indentation needed to indicate that they are sub-fields of
+`collection`. (The former specifies a Pandoc defaults file to process
+the sources before import, the second specifies the `raw` import mode
+in which sources are converted to output before being imported in the
+main document. 
+
+Options can also be specified on a per-source basis. For instance, you 
+can specify different defaults and import modes for different sources. 
+Instead of specifying a file only, you specify a map of options with a
+`file` key:
+
+```yaml
+---
+title: Journal of Serious Studies
+imports:
+- file: preface.md
+  mode: native
+  defaults: preface.yaml
+- file: article1.md
+  mode: raw
+  defaults: special-article.yaml
+- article2.md
+---
+```
+
+Here the `article2.md` source is specfied by just giving its file name, 
+but `preface.md` and `article1.md` are given with specific options.
 
 # YAML primer
 
-The filter heavily uses (a simple subset of) [YAML syntax](https://yaml.org/spec/1.2/spec.html). That is the syntax of metadata blocks in Pandoc's markdown and of Pandoc's default files. Here is a primer.
+The filter heavily uses (a simple subset of) [YAML syntax]
+(https://yaml.org/spec/1.2/spec.html). That is the syntax of metadata
+blocks in Pandoc's markdown and of Pandoc's default files. Here is a
+primer.
 
-A YAML *map* or *dictionary* is a series of `key:value` pairs. Each start on a new line. Keys are labels. Simple values can be strings, numbers or boolean (`true` or `false`):
+A YAML *map* or *dictionary* is a series of `key:value` pairs. Each
+start on a new line. Keys are labels. Simple values can be strings,
+numbers or boolean (`true` or `false`):
 
 ```yaml
 age: 12
@@ -170,7 +331,9 @@ tag-phrase: go steady, go far
 
 The metadata block in Pandoc markdown is a map, for instance.
 
-A YAML *list* is a list of `- value` items. Each starts on a new line with a hyphen. Again, simple values can be strings, numbers, booleans:
+A YAML *list* is a list of `- value` items. Each starts on a new line
+with a hyphen. Again, simple values can be strings, numbers,
+booleans:
 
 ```yaml
 - sax
@@ -179,7 +342,8 @@ A YAML *list* is a list of `- value` items. Each starts on a new line with a hyp
 - true
 ```
 
-But values need not be simple. They can themselves be maps or lists. Here is a list of three maps:
+But values need not be simple. They can themselves be maps or lists.
+Here is a list of three maps:
 
 ```yaml
 - file: chapter1.md
@@ -193,7 +357,8 @@ But values need not be simple. They can themselves be maps or lists. Here is a l
   year: 2015
 ```
 
-Note the indentation: each line of the first map starts at the same point. The following wouldn't be processed correctly:
+Note the indentation: each line of the first map starts at the same
+point. The following wouldn't be processed correctly:
 
 ```yaml
 - file: chapter1.md
@@ -213,7 +378,8 @@ editors:
 - Mel Al
 ```
 
-The list items must start at the line below the key, and be at least as indented as the key. The following would work well too:
+The list items must start at the line below the key, and be at least
+as indented as the key. The following would work well too:
 
 ```yaml
 authors:
@@ -235,9 +401,13 @@ But not the following:
 - Mel Al
 ```
 
-Here `- Jane Doe` is left of `authors:`, so isn't processed as its value. 
+Here `- Jane Doe` is left of `authors:`, so isn't processed as its
+value. 
 
-Here is a map with two keys, `plant` and `animal`. The value of `plant` is itself a map with three keys and the third key's value is a list. The value of `animal` is a map with two keys (`features`, `habitat`) whose values are themselves maps:
+Here is a map with two keys, `plant` and `animal`. The value of
+`plant` is itself a map with three keys and the third key's value is
+a list. The value of `animal` is a map with two keys
+(`features`, `habitat`) whose values are themselves maps:
 
 ```yaml
 plant:
@@ -255,10 +425,14 @@ animal:
     winter: mountain
 ```
 
-That's basically all you need for using this filter: understand  maps, lists, and how to use indentation to use them as values of other maps and lists. 
+That's basically all you need for using this filter: understand  maps,
+lists, and how to use indentation to use them as values of other maps
+and lists. 
 
-While we're at it, a couple of further features useful in Pandoc's markdown. 
-If a string value contains a colon, put it in single or double quotes. If it contains single quotes, put it in double quotes or vice versa. If it contains both, escape them with `\`.
+While we're at it, a couple of further features useful in Pandoc's
+markdown. If a string value contains a colon, put it in single or
+double quotes. If it contains single quotes, put it in double quotes
+or vice versa. If it contains both, escape them with `\`.
 
 ```
 title: "My book: a journey"
@@ -267,7 +441,11 @@ editor: Jane Doe
 publisher: The \"Hip \'Press
 ```
 
-The last kind of value besides maps, lists, strings, numbers and booleans are *text blocks*. These are entered by placing `|` where the value would have been, and entering the block in the lines below, each line starting with at least two spaces of indentation. Here is a map with one key whose value is a block of text:
+The last kind of value besides maps, lists, strings, numbers and
+booleans are *text blocks*. These are entered by placing `|` where
+the value would have been, and entering the block in the lines below,
+each line starting with at least two spaces of indentation. Here is a
+map with one key whose value is a block of text:
 
 ```
 thanks: |
@@ -295,23 +473,98 @@ Note that Pandoc reads strings and text blocks as markdown, so markdown formatti
 
 # The building process
 
-The overall process is:
+## Structure
 
-* source files + global metadata `--`(import defaults)`-->` native or raw elements `--`(book defaults)`-->` output
+Collection builds output following these steps. For each source file:
 
-For an illustration, suppose you run the filter on the document above (saved as `master.md`) with the command:
+1. (optional) Prepare the source's metadata. Any metadata that must be 
+  passed from the main source is placed in a temporary [metadata file]
+  (https://pandoc.org/MANUAL.html#option--metadata-file) used in (2).
+2. (optional) Run Pandoc on the source file, applying metadata from (1) 
+  and the user's desired settings for that file (defaults, filters, 
+  and in `raw` mode, templates).
+3. Import the result of (1)-(2) in the main document. If steps (1)-(2)
+  are skipped (`direct` mode), the source file is simply read into the 
+  main file as in Pandoc's own collection mechanism.    
 
-```bash
-pandoc --lua-filter collection.lua -defaults=book.yaml master.md -o book.pdf
-```
+Once that is done Collection lets Pandoc convert the resulting document 
+in output. 
 
-The filter will use the fields `global`, `collection` and `imports` to build a collection. The filter will build a main document out of all the files mentioned in `imports` in the order listed. The steps are as follows:
+## Import modes
 
-1. The filter runs Pandoc on each file. In the pandoc call, the `global` metadata is combined with that file's metadata (replacing any `global` field it may have) and applies a *defaults* file if provided. Here the defaults file `chapter-style.yaml` is applied to each import except `preface.md` that uses a different defaults file `preface-style.yaml`. Defaults files allow you to specify options, filters and templates to be applied to the file before integration. Thus any amount of formatting based on a combination of the file's metadata and the global metadata can be achieved before importing the file.
-2. For each file, the result is inserted in the main document. The result can be either in Pandoc's internal format (`native`) or already in whichiver format we're targetting (`raw`). Here we're importing the preface in `native` mode, but the chapters will be inserted in `latex`, the output format Pandoc generates to get PDFs. Each mode has its specific advantages:
-  a. The raw mode allows you to format chapters with pandoc templates. Pandoc templates are relatively easy ways of formatting the output. They can use the metadata passed from `master.md` (`$global.volume$` will print out `4`) and the metadata of the source file itself. 
-  b. The native mode allows you to apply Lua filters to the combined document, after imports. Because the material imported is still Pandoc's internal format, it is readily available for further manipulation by a Lua filter applied to the combined document. That is, the filter will still recognize which elements were quotes, headers, links etc. and modify them easily. By contrast, filters applied to the whole document won't normally touch or peer into material that is already in output format. 
-3. Pandoc then converts the combined document into output format. It applies any options or defaults provided. Here we specicy a defaults file `book.yaml` that can speciy what options, filters, templates Pandoc should use when generating the output document. 
+There are three import modes. They can be specified at the collection 
+level or for each individual source. To understand their respective 
+advantages you need to know the difference between Pandoc *filters* and
+*templates*.
+
+* [*Pandoc templates*](https://pandoc.org/MANUAL.html#templates) are 
+  templates to produce *output code* (e.g. `html` or `LaTeX`) based on 
+  the document's metadata. The output code in question can only be placed
+  *around* (before and after) the body of your document: the body's
+  conversion is exclusively controlled by Pandoc and placed in a `$body$`
+  template variable. For instance, if you want `html` output to include a
+  "Author: ..." paragraph before the document's body and a  
+  "Date: ..." paragraph at the end, provided your document's metadata
+  includes `author` and `date` fields respectively, you'd use the 
+  following template (saved as a file `mytemplate.html`):
+
+  ```html
+  $if(author)$<p>Author: $author$</p>$endif$
+  $body$
+  $if(date)$<p>Date: $date$</p>$endif$
+  ```
+
+  Pandoc's [template syntax](https://pandoc.org/MANUAL.html#templates)
+  is simple and allows for some flexible templating with 
+  conditionals, for loops and sub-templates. But it can do more advanced
+  operations like search/replace or move and can't alter the document's 
+  body. 
+* [*Pandoc filters*](https://pandoc.org/MANUAL.html#templates) are 
+  small programs that *manipulate Pandoc's internal format*. They are 
+  written in a programming language such as Lua or Python. They can do 
+  pretty much anything, including producing output code (inserted in
+  Pandoc's internal document as `RawBlocks` or `RawInline`) and
+  modifying the document's body. To write them, you need to understand
+  the language in question and Pandoc's [internal document structure]
+  (https://pandoc.org/lua-filters.html#lua-type-reference). If you have
+  the choice, it's best to write [Lua filters](https://pandoc.org/lua-filters.html): Pandoc processes them internally (faster, no platform-
+  specific dependencies) and the Lua language is relatively easy to
+  learn. There are also [plenty of examples](https://github.com/pandoc/lua-filters) to learn from. 
+
+The three import modes are as follows:
+
+* `direct`. Import the source directly in Pandoc's internal format. No
+  transformation (defaults, filters, templates) is applied before 
+  import. You can decide whether to merge the source metadata into that
+  of the main document. This is essentially like Pandoc's own
+  collection-building mechanism. Best for simple sources and speed. 
+* `native`. Run Pandoc on the source with desired settings and import
+  it in Pandoc's internal format. This means 
+  that its content will still be structured as paragraphs, headings, 
+  emphasis, code blocks, etc. in the main document. If using Pandoc's 
+  bibliography engine Citeproc on the source, the formatted bibliography
+  will be included too. This is best when you want to apply Pandoc filters
+  to the combined document and these filters manipulate structured 
+  elements of the document. Downside: you can't use 
+  Pandoc templates to format sources before import; only a master-level template can be applied. Any pre-import manipulation must be done 
+  with Pandoc defaults and filters instead. 
+* `raw`. Run Pandoc on the source with desired settings and import it
+  in the target output format. Its content converted to output code
+  (or a suitable intermediate format, e.g. LaTeX if the final format
+  is PDF) and inserted in the combined document as a
+  [RawBlock element]
+  (https://pandoc.org/lua-filters.html#type-rawblock). This is best
+  when you want to use Pandoc templates to format each source
+  separately. Downside: because the imported parts are already in output
+  format, filters applied to the combined document will not 'see' the 
+  inner structure of these parts (they won't easily identify headers,
+  paragraphs, quotation blocks etc). 
+
+As a rule of thumb, `direct` is good for the simplest sources, `native` 
+when sources are part of a whole (e.g. chapters or sections) and `raw`
+when sources are independent (e.g. different articles in a collection).
+
+# 
 
 # Advanced usage
 

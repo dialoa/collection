@@ -14,11 +14,21 @@ volumes and journal issues in Pandoc's markdown
 local utils = pandoc.utils
 local system = pandoc.system
 local path = require('pandoc.path')
---	% environement variables
+
+--	environement variables
 local env = {
 	working_directory = system.get_working_directory(),
 }
 env.input_folder = path.directory(PANDOC_STATE['input_files'][1])
+
+-- setup map
+-- further fields that may be added:
+--  - gather: strings list, metadata keys to gather from children
+-- 	- pass: strings list, metadata keys to be passed onto children
+--	- globalize: strings list, metadata keys to be made global onto children
+local setup = {
+	do_something = false, -- whether the filter needs to do anything
+}
 
 -- # Helper functions
 
@@ -35,11 +45,10 @@ function message(type, text)
 end
 
 --- to_json: converts a entire Pandoc document to json
---- to_json: converts a entire Pandoc document to json
 -- run_json_filter passes a Pandoc object as json to stdin
 -- we use regex to put it in the RawBlock of a wrapping json
 -- representation of a Pandoc object, so that we can
--- get back the json string
+-- recover the json string.
 -- @param doc pandoc Pandoc object
 -- @string if success, nil if failed
 -- @TODO in Win, use Python or Perl if present, powershell is slow
@@ -109,27 +118,23 @@ function to_json(doc)
 
 end
 
---- save_meta_as_defaults: converts a Meta or MetaMap to a defaults
--- file with a `metadata` field. The defaults file can then
--- be used to import the metadata map into other files.
--- @param filepath string the file path
--- @param map a Meta or MetaMap pandoc AST object
-function save_meta_as_defaults(filepath, map)
-	-- build empty doc with meta only
-	-- with the map in `metadata` field
-	local doc = pandoc.Pandoc({}, pandoc.Meta{ metadata = map})
-
-	-- convert to json then yaml
+--- save_meta_as_yaml: save Meta or Metamap as a yaml file
+-- uses pandoc to convert Meta or Metamap to yaml.
+-- a converter would be faster, but would need to parse Meta elements.
+function save_meta_as_yaml(map,filepath)
+	-- build an Pandoc document with map as meta
+	local doc = pandoc.Pandoc({}, pandoc.Meta(map))
+	-- convert the doc to json, so we can send it to pandoc.pipe
 	local yaml = ''
 	local json = to_json(doc)
-	if json then
-		-- convert to markdown with yaml block
+	-- pipe it to pandoc to convert to markdown
+	if json then 
 		yaml = pandoc.pipe('pandoc', {'-f', 'json', '-s', '-t', 'markdown'}, json)
-		-- extract yaml
-		yaml = string.match(yaml, "^%-%-%-\n(.*\n)%-%-%-\n+$") or ''
+		-- catch the block between first two `---` lines
+		yaml = string.match(yaml, "^%-%-%-\n(.*\n)%-%-%-\n") or ''
 	end
 
-	-- save file
+	-- save file, even if empty
 	local file = io.open(filepath, 'w')
 	file:write(yaml)
 	file:close()
@@ -222,119 +227,269 @@ return {
 
 -- # Collection functions
 
-function import_chapters(doc, tmpdir)
+--- gather_metadata: gather selected metadata from source files 
+-- into the document's metadata. The keys to be gathered
+-- are listed in setup.gather. Merging behaviour: if a key
+-- preexist we make a list with the old and new values; if
+-- both are lists we merge them. 
+function gather_metadata(meta)
+	for _,item in ipairs(meta.imports) do
+		-- we know `item `is a MetaMap, but not if it has a `file` key
+		-- if it doesn't we skip it
+		if not item.file then
+			goto continue
+		end
 
-	-- if a yaml file is needed, build it
-	local tempyaml = false
-	local tempyaml_filepath = ''
-	if doc.meta.global and doc.meta.global.t == 'MetaMap' then 
-		tempyaml = true
-		tempyaml_filepath = path.join( { tmpdir , 'metadata.yaml' })
-		local map = { global = doc.meta.global }
-		save_meta_as_defaults(tempyaml_filepath, map)
+		-- read and parse the file
+		local filepath = utils.stringify(item.file)
+		local file = io.open(filepath, 'r')
+		local itemdoc = pandoc.read(file:read('a'))
+		file:close()
+
+		-- for each key to gather, we check if it exists
+		-- and we import it in our document's metadata
+		-- merging behaviour:
+		-- 	if the preexisting is a list, we append
+		--  if the preexisting key has a value, we turn into
+		--		a list and we append
+		for _,key in ipairs(setup.gather) do
+			if itemdoc.meta[key] then
+				if not meta[key] then
+					meta[key] = itemdoc.meta[key]:clone()
+				else
+					if meta[key].t ~= 'MetaList' then
+						meta[key] = pandoc.MetaList(meta[key])
+					end
+					if itemdoc.meta[key].t == 'MetaList' then
+						meta[key]:extend(itemdoc.meta[key])
+					else
+						meta[key]:insert(itemdoc.meta[key])
+					end
+				end
+			end
+		end
+
+		:: continue ::
 	end
-	 
-	-- DEBUG: display the temp yaml file
-	-- local file = io.open(tempyaml_filepath, 'r')
+	return meta
+end
+
+--- globalize_and_pass: globalize selected metadata fields into 
+-- the `global-metadata` map and place selected metadata fields into
+-- the `child-metadata` map. 
+-- merging behaviour: warn and erase preexisting keys in `global/child
+-- -metadata`. 
+-- creates `global/child-metadata` keys only if needed
+-- @param meta
+-- @param setup.globalize global variable
+-- @return metadata document
+function globalize_and_pass(meta)
+	-- mapping `setup` keys with `meta` keys
+	local map = { 
+		globalize = 'global-metadata',
+		pass = 'child-metadata'
+	}
+	for setupkey, metakey in pairs(map) do
+		-- are there `setup.globalize` or `setup.pass` keys?
+		if setup[setupkey] then 
+			for _,key in ipairs(setup[setupkey]) do
+				-- is there a `key` field in metadata to copy?
+				if meta[key] then
+					-- copy in the `metakey` field, warn if merging
+					if not meta[metakey] then
+						meta[metakey] = pandoc.MetaMap({})
+						meta[metakey][key] = meta[key]
+					elseif not meta[metakey][key] then
+						meta[metakey][key] = meta[key]
+					else
+						-- "pass/globalize `key` replaced `key` in `metakey`"
+						message('WARNING', 'Metadata: ' .. setupkey ..
+							' `' .. key .. '` replaced `' .. key .. 
+							'` in `' .. metakey .. '`.')
+						meta[metakey][key] = meta[key]
+					end
+				end
+			end
+		end
+	end
+	return meta
+end
+
+--- import_sources: import sources into the main document
+-- passes metadata to sources using a temporary metadata file,
+-- runs pandoc on them in the required mode and places the 
+-- result in the main document
+function import_sources(doc, tmpdir)
+
+	-- CONSTANTS
+	local acceptable_modes = pandoc.List:new({'native', 'raw', 'direct'})
+
+	-- save_yaml_if_needed: if element is a map, save it as 
+	-- a temp yaml file `default_filename', otherwise assume 
+	-- it's a filepath. Either way, return a filepath.
+	function save_yaml_if_needed(element, default_filename)
+		if element.t ~= 'MetaMap' then
+			return utils.stringify(element)
+		else
+			local filepath = path.join({tmpdir, default_filename})
+			save_meta_as_yaml(element,filepath)
+			return filepath
+		end
+	end
+
+	-- GENERIC import features: metadata, defaults, mode, isolation
+	local generic_meta_fpath = ''
+	local generic_defaults_fpath = ''
+	local generic_mode = 'native'
+
+	-- Do we need to pass generic metadata? If yes, get/make a file
+	-- If yes, prepare a temp file
+	if doc.meta['global-metadata'] or doc.meta['child-metadata'] then
+		generic_meta_fpath = path.join( { tmpdir , 'generic_meta.yaml' })
+		-- `child-metadata` goes to the root, `global-metadata` is
+		-- inserted as is
+		local metamap = pandoc.MetaMap(doc.meta['child-metadata'])
+		metamap['global-metadata'] = doc.meta['global-metadata']
+		save_meta_as_yaml(metamap, generic_meta_fpath)
+	end
+
+	-- Do we need to pass generic defaults? 
+	-- If yes, are we given a file or a map to save as a temp file?
+	-- (yes if `collection` has a `defaults` key that is a map)
+	if doc.meta.collection and doc.meta.collection.defaults then
+		generic_defaults_fpath = save_yaml_if_needed(
+			doc.meta.collection.defaults, 'generic_defaults.yaml')
+	end
+
+	-- DEBUG: display a temp yaml file
+	-- local file = io.open(generic_defaults_fpath, 'r')
+	-- print('yaml file: ')
 	-- print(file:read('a'))
 	-- file:close()
+
+  	-- set a default import mode
+	if doc.meta.collection and doc.meta.collection['mode'] then
+		str = utils.stringify(doc.meta.collection['mode'])
+		if acceptable_modes:find(str) then
+			generic_mode = str
+		end
+	end
 
 	-- if the `isolate.lua` filter is needed, save it as tmp file
 	-- and get the user-specified custom isolate prefix if any
 	local needs_isolate_filter = false
+	local isolate_prefix_pattern = "c%d-"
 	if doc.meta.collection and doc.meta.collection['needs-isolate-filter'] then
 		needs_isolate_filter = true
-		isolate_prefix_pattern = "c%d-"
 		if doc.meta.collection['isolate-prefix-pattern'] then
 			isolate_prefix_pattern = utils.stringify(doc.meta.collection['isolate-prefix-pattern'])
 		end
-		isolate_filter_filepath = path.join( { tmpdir , 'isolate.lua' })
-		local file = io.open(isolate_filter_filepath, 'w')
+		isolate_filter_fpath = path.join( { tmpdir , 'isolate.lua' })
+		local file = io.open(isolate_filter_fpath, 'w')
 		file:write(isolate_filter)
 		file:close()
 	end
 
-  	-- set a default import mode
-	local default_mode = 'native'
-	if doc.meta.collection and doc.meta.collection['mode'] then
-		str = utils.stringify(doc.meta.collection['mode'])
-		if str == 'native' or str == 'raw' then
-			default_mode = str
-		end
-	end
 
-	-- is there a default defaults file?
-	local default_defaults = nil
-	if doc.meta.collection and doc.meta.collection['defaults'] then
-		default_defaults = utils.stringify(doc.meta.collection['defaults'])
-	end
+	-- MAIN LOOP to import each item in the list
+	-- `i` will be used as unique identifier if needed
 
-	-- go through the list, import each item
-	--		i will be used as unique identifier if needed
 	for i = 1, #doc.meta.imports do
 		item = doc.meta.imports[i]
 
-		-- set the filename
-		-- if `item` is a MetaMap without `file` field we can't make sense of it
-		-- so move on to next item
-		if item.t == 'MetaMap' and not item.file then
+		-- we can rely on item being a MetaMap
+		-- but if it doesn't have a `file` field nothing to do, 
+		-- move on to the next one
+		if not item.file then
 			goto continue
 		end
-		-- if the item isn't a MetaMap, assume it's a filename
-		-- nb, instead of merely storing the filename in source
-		-- we fix the AST document's metadata. (Given Lua passes
-		-- tables by references, modifying `item` modifies `doc`.)
-		-- This is safer for future uses and filters run after this one.
-		if item.t ~= "MetaMap" then
-			item = pandoc.MetaMap({ file = pandoc.MetaString(utils.stringify(item)) })
-			doc.meta.imports[i] = item
+
+		-- LOCAL import features: source, metadata, defaults, mode, merge
+		local source = utils.stringify(item.file)
+		local local_meta_fpath = ''
+		local local_defaults_fpath = ''
+		local mode = generic_mode
+		local merge_defaults = false
+		local merge_meta = false
+
+		-- do we need local metadata? 
+		if item['child-metadata'] then
+			local_meta_fpath = save_yaml_if_needed(
+				item['child-metadata'], 'local_meta.yaml' )
 		end
 
-		-- set the mode and defaults
-		-- use the default import mode unless overridden for this item
-		local mode = default_mode
+		-- do we need local defaults?
+		if item['defaults'] then
+			local_defaults_fpath = save_yaml_if_needed(
+				item['defaults'], 'local_defaults.yaml' )
+		end
+
+		-- do we have a local mode?
 		if item.mode then
 			local str = utils.stringify(item.mode)
-			if str == 'native' or str == 'raw' then
+			if acceptable_modes:find(str) then
 				mode = str
 			end
 		end
-		-- use the default defaults file unless overriden
-		-- recall that default_defaults might be nil
-		local defaults = default_defaults
-		if item.defaults then
-			defaults = utils.stringify(item.defaults)
+
+		-- merge meta and or defaults?
+		if item['merge-defaults'] and item['merge-defaults'] == true then
+			merge_defaults = true
+		end
+		if item['merge-metadata'] and item['merge-metadata'] == true then
+			merge_meta = true
 		end
 
-		-- construct the source and default filepaths
-		-- note: they are located relative to the master (input) file
-		local source = utils.stringify(item.file)
-		if path.is_relative(source) then
-			source = path.join({ env.input_folder, source} )
-		end
-		if defaults and path.is_relative(defaults) then
-			defaults = path.join({ env.input_folder, defaults })
-		end
+		-- COMMAND LINE ARGUMENTS
 
-		-- import to blocks in the required mode
-
-		-- 	build the list of command line arguments
-		--		source file
+		-- source filepath
 		local arguments = pandoc.List:new({source})
-		--		add source directory to resource path
-		--		in case biblos, images, are specified relative to it
-		arguments:extend({'--resource-path', path.directory(source)})
-		--		add defaults and tempyaml if provided
-		if defaults then 
-			arguments:extend({'-d', defaults})
+
+		-- add source's directory to the resource path, if different
+		-- from the working directory.
+		-- in case biblios, defaults, are specified relative to it
+		--		get current resource path table, insert the source folder
+		if path.directory(source) ~= '.' then
+			local paths = pandoc.List:new(PANDOC_STATE.resource_path)
+			paths:insert(path.directory(source))
+			--		build a string with paths separated by ':'
+			local path_str = ''
+			for i = 1, #paths do
+				path_str = path_str .. paths[i]
+				if i < #paths then
+					path_str = path_str .. ':'
+				end
+			end
+			if path_str ~= '' then
+				arguments:extend({'--resource-path', pathstr})
+			end
 		end
-		if tempyaml then 
-			arguments:extend({'-d', tempyaml_filepath})
+
+		-- add any generic defaults and metadata
+		-- if no local ones provided or if we're asked to merge
+		if generic_meta_fpath ~= '' then
+			if local_meta_fpath == '' or merge_meta == true then
+				arguments:extend({'--metadata-file', generic_meta_fpath})
+			end
+		end 
+		if generic_defaults_fpath ~= '' then
+			if local_defaults_fpath == '' or merge_defaults == true then
+				arguments:extend({'--defaults', generic_defaults_fpath})
+			end
 		end
+
+		-- add any local defaults and metadata
+		if local_meta_fpath ~= '' then
+			arguments:extend({'--metadata-file', local_meta_fpath})
+		end 
+		if local_defaults_fpath ~= '' then
+			arguments:extend({'--defaults', local_defaults_fpath})
+		end
+
 		--		run the isolate filter with a prefix
 		if (doc.meta.collection and doc.meta.collection.isolate and item.isolate ~= false)
 			or item.isolate then
-			arguments:extend({'-L', isolate_filter_filepath, 
+			arguments:extend({'-L', isolate_filter_fpath, 
 			'-M', 'isolate-prefix='.. string.format(isolate_prefix_pattern, i) })	
 		end
 
@@ -357,18 +512,23 @@ function import_chapters(doc, tmpdir)
 		--	run the commands for the required mode
 		if mode == 'native' then
 	
+			-- @TODO need to modify to have FORMAT right and yet 
+			-- catch the result in native format
 			arguments:extend({'-t', 'json'})
 			inform(source, arguments)
 			local result = pandoc.read(pandoc.pipe('pandoc', arguments, ''), 'json')
 			doc.blocks:extend(result.blocks)
 
-		else -- mode = 'raw'
+		elseif mode == 'raw' then
 
 			arguments:extend({'-t', FORMAT})
 			inform(source, arguments)
 			local result = pandoc.pipe('pandoc', arguments, '')
 			doc.blocks:insert(pandoc.RawBlock(FORMAT, result))
 
+		elseif mode == 'direct' then
+
+			-- @TODO write
 		end
 
 		:: continue ::
@@ -378,69 +538,153 @@ function import_chapters(doc, tmpdir)
 
 end
 
+-- build: call the import_sources function with a temporary directory
 function build(doc)
 
-	-- check doc.meta.imports
+	if setup.do_something == true then
+		system.with_temporary_directory('collection', function(tmpdir)
+				doc = import_sources(doc, tmpdir)
+			end)
+		return doc
+	end
+
+end
+
+
+function prepare(meta)
+
+	-- check meta.imports
 	-- do nothing if it doesn't exist, ensure it's a list otherwise
-	if not doc.meta.imports then
+	if not meta.imports then
 		message('INFO', "No `imports` field in ".. PANDOC_STATE['input_files'][1] 
 			.. ", nothing to import.")
 		return nil
+	elseif meta.imports.t ~= 'MetaList' then
+		meta.imports = pandoc.MetaList(meta.imports)
 	end
-	if doc.meta.imports ~= 'MetaList' then
-		doc.meta.imports = pandoc.MetaList(doc.meta.imports)
+	setup.do_something = true
+
+	-- ensure each item is a MetaMap; if not, assume it's a filename
+	-- nb, with fix this in the doc itself, in case later filters
+	-- need this info. 
+	for i = 1, #meta.imports do
+		if meta.imports[i].t ~= 'MetaMap' then
+			meta.imports[i] = pandoc.MetaMap({ 
+				file = pandoc.MetaString(utils.stringify(meta.imports[i])) 
+			})
+		end
+	end
+	-- bear in mind some `imports` items may still lack a `file` key
+	-- this allows users to deactive a source without removing its data
+	-- by changing `file` to `fileoff` for instace
+
+	-- build lists of metadata keys to gather, globalize and pass
+	if meta.collection then
+		for _,key in ipairs({'gather', 'globalize', 'pass'}) do
+			if meta.collection[key] then
+				if meta.collection[key].t ~= 'MetaList' then
+					meta.collection[key] = pandoc.MetaList(meta.collection[key])
+				end
+				setup[key] = pandoc.List:new()
+				for _,entry in ipairs(meta.collection[key]) do
+					setup[key]:insert(utils.stringify(entry))
+				end
+			end
+		end
 	end
 
-	-- offprint mode? if yes we reduce the imports list to that file
+	-- gather metadata from source files into the main metadata
+	if setup.gather then
+		meta = gather_metadata(meta)
+	end
+
+	-- globalize and pass the required metadata keys
+	if setup.globalize or setup.pass then
+		meta = globalize_and_pass(meta)
+	end
+
+	-- offprint mode? if yes we reduce the imports list to that item
 	-- if we can't make sense of the `offprint` field we erase it
 	-- and warn the user
-	if doc.meta.offprint then
+	if meta.offprint then
 		message('INFO', 'Trying offprint mode')
-		local index = tonumber(utils.stringify(doc.meta.offprint))
-		if index and doc.meta.imports[index] then
-			doc.meta.imports = pandoc.MetaList(doc.meta.imports[index])
+		local index = tonumber(utils.stringify(meta.offprint))
+		if index and meta.imports[index] then
+			meta.imports = pandoc.MetaList(meta.imports[index])
 		else
-			doc.meta.offprint = nil
+			meta.offprint = nil
 			message('WARNING', 'The offprint required (' .. index 
 				.. ") doesn't exist, cancelling offprint mode.")
 		end
 	end
 
-	-- do we need a temporary directory?
-	--   either to pass metadata yaml, or to have the `isolate.lua` filter 
-	local needs_tmpdir = false
-	if doc.meta.global and doc.meta.global.t == 'MetaMap' then
-		needs_tmpdir = true
-	elseif doc.meta.collection and doc.meta.collection.isolate then
-		needs_tmpdir = true
-		doc.meta.collection['needs-isolate-filter'] = true -- reused later
-	else
-		for _,item in ipairs(doc.meta.imports) do
-			if item.isolate then
-				needs_tmpdir = true
-				doc.meta.collection['needs-isolate-filter'] = true
-				break
-			end
-		end
-	end
-
-	-- create a tmp directory if needed and import chapters
-	if needs_tmpdir then
-		system.with_temporary_directory('collection', function(tmpdir)
-				doc = import_chapters(doc, tmpdir)
-			end)
-	else
-		doc = import_chapters(doc)
-	end
-
-	return doc
+	return meta
 
 end
 
+--- syntactic_sugar: normalize alias keys in meta
+-- in case of duplicates we warn the user and
+-- use the ones with more explicit names.
+function syntactic_sugar(meta)
+
+	-- function that converts aliases to official fields in a map
+	-- following an alias table. 
+	-- The map could be the doc's Meta or a MetaMap within it. 
+	-- Use `root` to let the user know what the root key was in the 
+	-- later case in error messages, e.g. "imports[1]/". 
+	-- Merging behaviour: if the official already exists we warn the
+	-- user and simply ignore the alias key.
+	-- Warning: aliases must be acceptable Lua map keys, so they can't
+	-- 	contain e.g. dashes. Official names aren't restricted.
+	-- @alias_table table an alias map aliasname = officialname. 
+	-- @root string names the root for error messages, e.g. "imports[1]/"
+	-- @map Meta or MetaMap to be cleaned up
+	function make_official(alias_table, root, map)
+		for alias,official in pairs(alias_table) do
+			if map[alias] then 
+				if not map[official] then
+					map[official] = map[alias]
+					map[alias] = nil
+				else 
+					message('WARNING', 'Metadata: `'..root..alias..'` '
+						 ..'is a duplicate of `'..root..official..'`, '
+						..'it will be ignored.')
+				end
+			end
+		end
+		return map
+	end
+
+	local alias_tab = {
+		global = 'global-metadata',
+		metadata = 'child-metadata'
+	}
+	meta = make_official(alias_tab, '', meta)
+
+	if meta.imports then 
+		alias_tab = {
+			metadata = 'child-metadata'
+		}
+		for i = 1, #meta.imports do
+			local rt = 'imports[' .. i .. ']/'
+			meta.imports[i] = make_official(alias_tab, rt, meta.imports[i])
+		end
+	end
+
+	return meta
+end
+
 --- Main filter
+-- syntactic sugar: normalize alias keys in meta
+-- prepare options and metadata
+-- build the doc
 return {
 	{
+		Meta = function(meta)
+			return syntactic_sugar(meta)
+		end,
 		Pandoc = function(doc)
+			doc.meta = prepare(doc.meta)
 			return build(doc)
 		end
 	}

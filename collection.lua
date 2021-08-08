@@ -28,6 +28,8 @@ env.input_folder = path.directory(PANDOC_STATE['input_files'][1])
 --	- globalize: strings list, metadata keys to be made global onto children
 local setup = {
 	do_something = false, -- whether the filter needs to do anything
+	isolate = false, -- whether to isolate sources by default
+	needs_isolate_filter = false -- whether the isolate filter is needed
 }
 
 -- # Helper functions
@@ -377,10 +379,9 @@ function import_sources(doc, tmpdir)
 
 	-- if the `isolate.lua` filter is needed, save it as tmp file
 	-- and get the user-specified custom isolate prefix if any
-	local needs_isolate_filter = false
 	local isolate_prefix_pattern = "c%d-"
-	if doc.meta.collection and doc.meta.collection['needs-isolate-filter'] then
-		needs_isolate_filter = true
+	local isolate_filter_fpath = ''
+	if setup.needs_isolate_filter then
 		if doc.meta.collection['isolate-prefix-pattern'] then
 			isolate_prefix_pattern = utils.stringify(doc.meta.collection['isolate-prefix-pattern'])
 		end
@@ -389,7 +390,6 @@ function import_sources(doc, tmpdir)
 		file:write(isolate_filter)
 		file:close()
 	end
-
 
 	-- MAIN LOOP to import each item in the list
 	-- `i` will be used as unique identifier if needed
@@ -411,6 +411,7 @@ function import_sources(doc, tmpdir)
 		local mode = generic_mode
 		local merge_defaults = false
 		local merge_meta = false
+		local isolate = false
 
 		-- do we need local metadata? 
 		if item['child-metadata'] then
@@ -438,6 +439,15 @@ function import_sources(doc, tmpdir)
 		end
 		if item['merge-metadata'] and item['merge-metadata'] == true then
 			merge_meta = true
+		end
+
+		-- isolate this specific item?
+		if item.isolate and item.isolate == true then
+			isolate = true
+		elseif item.isolate and item.isolate == false then
+			isolate = false
+		else
+			isolate = setup.isolate
 		end
 
 		-- COMMAND LINE ARGUMENTS
@@ -486,9 +496,8 @@ function import_sources(doc, tmpdir)
 			arguments:extend({'--defaults', local_defaults_fpath})
 		end
 
-		--		run the isolate filter with a prefix
-		if (doc.meta.collection and doc.meta.collection.isolate and item.isolate ~= false)
-			or item.isolate then
+		--		run the isolate filter with a prefix, if needed
+		if isolate then
 			arguments:extend({'-L', isolate_filter_fpath, 
 			'-M', 'isolate-prefix='.. string.format(isolate_prefix_pattern, i) })	
 		end
@@ -602,6 +611,25 @@ function prepare(meta)
 	if setup.globalize or setup.pass then
 		meta = globalize_and_pass(meta)
 	end
+
+	-- ISOLATE
+	-- do we isolate sources by defaults?
+	if meta.collection and meta.collection.isolate then
+		if meta.collection.isolate == true then
+			setup.isolate = true
+			setup.needs_isolate_filter = true
+		end
+	end
+	-- is the filter otherwise needed to isolate some specific source
+	if not setup.needs_isolate_filter then
+		for _,item in ipairs(meta.imports) do
+			if item.isolate and item.isolate == true then
+				setup.needs_isolate_filter = true
+				break
+			end
+		end
+	end
+
 
 	-- offprint mode? if yes we reduce the imports list to that item
 	-- if we can't make sense of the `offprint` field we erase it

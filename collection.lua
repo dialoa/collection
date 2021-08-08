@@ -461,7 +461,7 @@ function import_sources(doc, tmpdir)
 				end
 			end
 			if path_str ~= '' then
-				arguments:extend({'--resource-path', pathstr})
+				arguments:extend({'--resource-path', path_str})
 			end
 		end
 

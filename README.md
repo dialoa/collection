@@ -3,6 +3,8 @@ title: "Collection - generating collections with Pandoc"
 author: "Julien Dutant"
 ---
 
+**WARNING**: this filter is in progress. Functionality may and will change. 
+
 Collection for [Pandoc](https://pandoc.org) is a [Pandoc Lua filter]
 (https://pandoc.org/lua-filters.html) for building complex multi-part
 documents such as academic journalss, multi-author collections, or
@@ -14,7 +16,8 @@ Call a *collection* is a single document build for from document parts
 in multiple source files. [Pandoc](pandoc.org) can already build
 collections:
 
-```bash pandoc source1.md source2.md source3.md -o collection.html
+```bash 
+pandoc source1.md source2.md source3.md -o collection.html
 ```
 
 This process is limited though: sources must be specified on the

@@ -567,8 +567,6 @@ As a rule of thumb, `direct` is good for the simplest sources, `native`
 when sources are part of a whole (e.g. chapters or sections) and `raw`
 when sources are independent (e.g. different articles in a collection).
 
-# 
-
 # Advanced usage
 
 ## Combining with other filters

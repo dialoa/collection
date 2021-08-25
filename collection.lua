@@ -4,7 +4,7 @@ volumes and journal issues in Pandoc's markdown
 @author Julien Dutant <julien.dutant@kcl.ac.uk>
 @copyright 2021 Julien Dutant
 @license MIT - see LICENSE file for details.
-@release 0.2
+@release 0.3
 ]]
 
 -- # Filter settings
@@ -559,7 +559,8 @@ function build(doc)
 
 end
 
-
+--- prepare: prepare document metadata for building
+-- gather, globalize and pass metadata, offprint mode
 function prepare(meta)
 
 	-- check meta.imports
@@ -567,7 +568,7 @@ function prepare(meta)
 	if not meta.imports then
 		message('INFO', "No `imports` field in ".. PANDOC_STATE['input_files'][1] 
 			.. ", nothing to import.")
-		return nil
+		return meta
 	elseif meta.imports.t ~= 'MetaList' then
 		meta.imports = pandoc.MetaList(meta.imports)
 	end
@@ -630,7 +631,6 @@ function prepare(meta)
 		end
 	end
 
-
 	-- offprint mode? if yes we reduce the imports list to that item
 	-- if we can't make sense of the `offprint` field we erase it
 	-- and warn the user
@@ -683,19 +683,19 @@ function syntactic_sugar(meta)
 		return map
 	end
 
-	local alias_tab = {
+	local aliases = {
 		global = 'global-metadata',
 		metadata = 'child-metadata'
 	}
-	meta = make_official(alias_tab, '', meta)
+	meta = make_official(aliases, '', meta)
 
 	if meta.imports then 
-		alias_tab = {
+		local aliases = {
 			metadata = 'child-metadata'
 		}
 		for i = 1, #meta.imports do
 			local rt = 'imports[' .. i .. ']/'
-			meta.imports[i] = make_official(alias_tab, rt, meta.imports[i])
+			meta.imports[i] = make_official(aliases, rt, meta.imports[i])
 		end
 	end
 
@@ -704,8 +704,6 @@ end
 
 --- Main filter
 -- syntactic sugar: normalize alias keys in meta
--- prepare options and metadata
--- build the doc
 return {
 	{
 		Meta = function(meta)

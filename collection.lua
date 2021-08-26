@@ -29,7 +29,8 @@ env.input_folder = path.directory(PANDOC_STATE['input_files'][1])
 local setup = {
 	do_something = false, -- whether the filter needs to do anything
 	isolate = false, -- whether to isolate sources by default
-	needs_isolate_filter = false -- whether the isolate filter is needed
+	needs_isolate_filter = false, -- whether the isolate filter is needed
+	offprint_mode = false, -- whether we're in offprint mode
 }
 
 -- # Helper functions
@@ -586,7 +587,25 @@ function prepare(meta)
 	end
 	-- bear in mind some `imports` items may still lack a `file` key
 	-- this allows users to deactive a source without removing its data
-	-- by changing `file` to `fileoff` for instace
+	-- by changing `file` to `fileoff` for instance
+
+	-- offprint mode? if yes we reduce the imports list to that item
+	-- warn if we can't make sense of the `offprint-mode` field 
+	-- if `offprints` is present we replace `collection` with it
+	if meta['offprint-mode'] then
+		local index = tonumber(utils.stringify(meta['offprint-mode']))
+		if index and meta.imports[index] then
+			setup.offprint_mode = true
+			meta.imports = pandoc.MetaList(meta.imports[index])
+			if meta.offprints then 
+				meta.collection = meta.offprints
+			end
+			message('INFO', 'Offprint mode, source number ' .. index)
+		else
+			message('WARNING', 'The offprint required (' .. index 
+				.. ") doesn't exist, ignoring offprint mode.")
+		end
+	end
 
 	-- build lists of metadata keys to gather, globalize and pass
 	if meta.collection then
@@ -615,11 +634,10 @@ function prepare(meta)
 
 	-- ISOLATE
 	-- do we isolate sources by defaults?
-	if meta.collection and meta.collection.isolate then
-		if meta.collection.isolate == true then
-			setup.isolate = true
-			setup.needs_isolate_filter = true
-		end
+	if not setup.offprint_mode and meta.collection 
+	  and meta.collection.isolate == true then
+		setup.isolate = true
+		setup.needs_isolate_filter = true
 	end
 	-- is the filter otherwise needed to isolate some specific source
 	if not setup.needs_isolate_filter then
@@ -631,21 +649,6 @@ function prepare(meta)
 		end
 	end
 
-	-- offprint mode? if yes we reduce the imports list to that item
-	-- if we can't make sense of the `offprint` field we erase it
-	-- and warn the user
-	if meta.offprint then
-		message('INFO', 'Trying offprint mode')
-		local index = tonumber(utils.stringify(meta.offprint))
-		if index and meta.imports[index] then
-			meta.imports = pandoc.MetaList(meta.imports[index])
-		else
-			meta.offprint = nil
-			message('WARNING', 'The offprint required (' .. index 
-				.. ") doesn't exist, cancelling offprint mode.")
-		end
-	end
-
 	return meta
 
 end
@@ -653,6 +656,8 @@ end
 --- syntactic_sugar: normalize alias keys in meta
 -- in case of duplicates we warn the user and
 -- use the ones with more explicit names.
+-- if `collection` or `offprints` are strings
+-- we assume they're defaults filepaths.
 function syntactic_sugar(meta)
 
 	-- function that converts aliases to official fields in a map
@@ -697,6 +702,24 @@ function syntactic_sugar(meta)
 			local rt = 'imports[' .. i .. ']/'
 			meta.imports[i] = make_official(aliases, rt, meta.imports[i])
 		end
+	end
+
+	if meta.collection.t ~= 'MetaMap' then
+		local filepath = utils.stringify(meta.collection)
+		message('INFO', 'Assuming `collection` is a defaults file ' 
+			.. 'filepath: ' .. filepath .. '.' )
+		meta.collection = pandoc.MetaMap({
+			defaults = filepath
+		})
+	end
+
+	if meta.offprints.t ~= 'MetaMap' then
+		local filepath = utils.stringify(meta.offprints)
+		message('INFO', 'Assuming `offprints` is a defaults file ' 
+			.. 'filepath: ' .. filepath .. '.' )
+		meta.offprints = pandoc.MetaMap({
+			defaults = filepath
+		})
 	end
 
 	return meta

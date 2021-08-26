@@ -247,10 +247,8 @@ if present. (If you're not familiar with the term "map", see the
 
 * `collection`: a map of options to build the collection and
   offprints.
-* `offprint-setup`: a map of additional options to build offprints
-  (not used when building a collection). 
-* `collection-setup`: a map of additional options to build
-  collections (not used when building an offprint.)
+* `offprints`: a map of options to build offprints. Overrides 
+  those in `collection` for offprint outputs.
 * `child-metadata` (alias `metadata`): metadata passed to the sources
   before import. If building a collection of collections, this is
   only passed to the immediate sources of the collection, not the
@@ -259,8 +257,8 @@ if present. (If you're not familiar with the term "map", see the
   in a `global-metadata` field. When building recursively
   (collections of collections ... of collections of sources), this
   trickles down to the sources of the sources. 
-* `offprint`. Normally used on the command line only, to switch to
-  offprint mode. 
+* `offprint-mode`. Switch to offprint mode. Normally used on the command
+  line.
 * ... and other fields of the form `collection-...` that provide
       aliases for collection options, meant to be used on the command
       line. 
@@ -566,6 +564,151 @@ The three import modes are as follows:
 As a rule of thumb, `direct` is good for the simplest sources, `native` 
 when sources are part of a whole (e.g. chapters or sections) and `raw`
 when sources are independent (e.g. different articles in a collection).
+
+## Offprint mode
+
+In offprint mode only one source is imported. This is activated by
+setting the metadata variable `offprint-mode` to the number of that
+source in the list. For instance, a master file with this metadata
+will only produce chapter 3:
+
+```yaml
+offprint-mode: 3
+imports:
+- chapter_1.md 
+- chapter_2.md 
+- chapter_3.md 
+```
+
+The option is most naturally used at the command line rather than
+in the master file metadata. Use Pandoc's [command line option `-M` alias
+`--metadata`](https://pandoc.org/MANUAL.html#option--metadata):
+
+```bash
+pandoc -L collection.lua master.md -M offprint-mode=3 -o chap3.pdf
+pandoc -L collection.lua master.md --metadata=offprint-mode:3 -o chap3.pdf
+```
+
+Note that in offprint mode `gather` will only gather metadata from the 
+source that is offprinted, not from the other sources.
+
+If you want to use alternative defaults files or `gather/pass/globalize` 
+options for offprints, use the `offprints` metadata key:
+
+```yaml
+collection:
+  defaults: chapter-in-collection.yaml
+offprints:
+  defaults: chapter-offprint.yaml
+imports:
+- chapter_1.md 
+- chapter_2.md 
+- chapter_3.md 
+```
+
+# Master file options
+
+Overall structure:
+
+```yaml
+metadata: # alias `child-metadata`
+global: # alias `global-metadata`
+collection:
+  gather: 
+  globalize:
+  pass:
+  defaults:
+offprints:
+  gather: 
+  globalize:
+  pass:
+  defaults:
+imports:
+- file: 
+  defaults:
+  metadata: # alias of child-metadata
+
+```
+
+Description of each key. We write `key/subkey` to indicate that `subkey`
+is a key within a map (or list of maps) in `key`.
+
+`metadata` alias `child-metadata`
+: map of YAML metadata passed to sources before import
+
+`global` alias `global-metadata`
+: map of YAML metadata passed to sources under the key `global` before import
+
+`collection`
+: map of collection options, or string giving the filepath of a defaults
+file to be used when importing sources (see `collection/defaults`). 
+
+`offprints`
+: like `collection`, but used when producing offprints. If not provided, 
+the `collection` key is used. If provided, this wholly replaces the
+`collection` value when producing offprints. Make sure you duplicate 
+any `collection` options desired when producing offprints too.
+
+`imports`
+: list of sources. Each item can be a string, the filepath of the 
+  source to import, or a map of options describing the source: `file`,
+  `metadata`, `defaults`, .... If there is only one source, `imports`
+  can simply be its filepath or its map of options. Examples:
+
+  ```yaml
+  imports: body.md
+  ```
+
+`collection/gather`
+: list of metadata keys gathered from sources before import. If the same 
+key is present in several documents, it will be turned into a list. This 
+behaviour is useful for `header-includes` and `bibliography`. Example:
+`gather: [bibliography, header-includes]`.
+
+`collection/pass`
+: metadata keys passed to sources before import. Example: 
+`pass: [volume,issue]`
+
+`collection/defaults`
+: default file (with path from working directory) to be used on importing
+sources.
+
+`offprints/gather`
+: like `collection/gather`, but only used when generating offprints.
+
+`offprints/globalize`
+: like `collection/globalize`, but only used when generating offprints.
+
+`offprints/pass`
+: like `collection/pass`, but only used when generating offprints.
+
+`import/file`
+: the filepath of a source.
+
+`import/defaults`
+: the defaults file filepath to be used when importing the source.
+
+`import/metadata` alias `import/child-metadata`
+: metadata map to be passed to the source before import. Example:
+
+  ```yaml
+  imports: 
+  - file: preface.md
+    metadata: 
+      author: Jim Doe
+      date: 20 june 2021
+  - file: chapter-02.md
+    metadata: 
+      author: Jane Doe
+      date: 22 june 2021
+  ```
+
+
+
+
+
+
+
 
 # Advanced usage
 

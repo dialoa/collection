@@ -2,6 +2,7 @@
 title: My collection
 collection:
     mode: raw
+    defaults: resources/chapter-defaults.yaml
 imports:
 - chapter1.md
 - chapter2.md

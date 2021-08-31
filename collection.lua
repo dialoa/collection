@@ -713,7 +713,7 @@ function syntactic_sugar(meta)
 		})
 	end
 
-	if meta.offprints.t ~= 'MetaMap' then
+	if meta.offprints and meta.offprints.t ~= 'MetaMap' then
 		local filepath = utils.stringify(meta.offprints)
 		message('INFO', 'Assuming `offprints` is a defaults file ' 
 			.. 'filepath: ' .. filepath .. '.' )

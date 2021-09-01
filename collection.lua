@@ -148,18 +148,50 @@ end
 --		This filter will be ran on imported document if we need to isolate them
 --		Needs to be a saved as a temporary file to do so
 isolate_filter = [[
+---- # Prefix-ids - Prefixings all ids in a Pandoc document
+
+-- @author Julien Dutant <julien.dutant@kcl.ac.uk>
+-- @copyright 2021 Julien Dutant
+-- @license MIT - see LICENSE file for details.
+-- @release 0.1
+
 -- # Global variables
 local prefix = ''
 local old_identifiers = pandoc.List:new()
+local pandoc_crossref = true
+local crossref_prefixes = pandoc.List:new({'fig','sec','eq','tbl','lst'})
 
 --- get_options: get filter options for document's metadata
 -- @param meta pandoc Meta element
 function get_options(meta)
 
-    if meta['isolate-prefix'] then
-        prefix = pandoc.utils.stringify(meta['isolate-prefix'])
+    -- syntactic sugar: options aliases
+    -- merging behaviour: aliases prevail
+    local aliases = {'prefix', 'pandoc-crossref'}
+    for _,alias in ipairs(aliases) do
+        if meta['prefix-ids-' .. alias] ~= nil then
+            -- create a 'prefix-ids' key if needed
+            if not meta['prefix-ids'] then
+                meta['prefix-ids'] = pandoc.MetaMap({})
+            end
+            meta['prefix-ids'][alias] = meta['prefix-ids-' .. alias]
+            meta['prefix-ids-' .. alias] = nil
+        end
     end
 
+    -- save options in global variables
+    if meta['prefix-ids'] then
+
+        if meta['prefix-ids']['prefix'] then
+            prefix = pandoc.utils.stringify(meta['prefix-ids']['prefix'])
+        end
+        if meta['prefix-ids']['pandoc-crossref'] ~= nil 
+          and meta['prefix-ids']['pandoc-crossref'] == false then
+            pandoc_crossref = false
+        end
+        
+    end
+    return meta
 end
 
 --- process_doc: process the pandoc document
@@ -181,9 +213,30 @@ function process_doc(doc)
     add_prefix = function (el) 
         if el.identifier and el.identifier ~= '' then
             old_identifiers:insert(el.identifier)
-            local new_identifier = prefix .. el.identifier
+            local new_identifier = ''
+            -- if pandoc-crossref type, we add the prefix after "fig:"
+            if pandoc_crossref then 
+                local type = el.identifier:match('^(%a+):')
+                if crossref_prefixes:find(type) then
+                    new_identifier = type .. ':' .. prefix 
+                        .. el.identifier:match('^%a+:(.*)')
+                else
+                    new_identifier = prefix .. el.identifier
+                end
+            else
+                new_identifier = prefix .. el.identifier
+            end
             el.identifier = new_identifier
             return el
+        end
+    end
+    -- add_prefix_string function
+    -- same as add_prefix but for pandoc-crossref "{eq:label}" strings
+    add_prefix_string = function(el)
+        local eq_identifier = el.text:match('{#eq:(.*)}')
+        if eq_identifier then
+            old_identifiers:insert('eq:' .. eq_identifier)
+            return pandoc.Str('{#eq:' .. prefix .. eq_identifier .. '}')
         end
     end
 
@@ -196,21 +249,51 @@ function process_doc(doc)
         Div = add_prefix,
         Header = add_prefix,
         Table = add_prefix,
-        CodeBlock = add_prefix,        
+        CodeBlock = add_prefix,
+        Str = pandoc_crossref and add_prefix_string
     })
     doc.blocks = div.content
 
+    -- function to add prefixes to links
     local add_prefix_to_link = function (link)
         if link.target:sub(1,1) == '#' 
           and old_identifiers:find(link.target:sub(2,-1)) then
-            new_target = '#' .. prefix .. link.target:sub(2,-1)
-            link.target = new_target
+            local target = link.target:sub(2,-1)
+            -- handle pandoc-crossref types targets if needed
+            if pandoc_crossref then
+                local type = target:match('^(%a+):')
+                if crossref_prefixes:find(type) then
+                    target = '#' .. type .. ':' .. prefix 
+                        .. target:match('^%a+:(.*)')
+                else
+                    target = '#' .. prefix .. target
+                end
+            else
+                target = '#' .. prefix .. target
+            end
+            link.target = target
             return link 
         end
     end
+    -- function to add prefixes to pandoc-crossref citations
+    -- looking for keys starting with `fig:`, `sec:`, `eq:`, ... 
+    local add_prefix_to_crossref_cites = function (cite)
+        for i = 1, #cite.citations do
+            local type = cite.citations[i].id:match('^(%a+):')
+            if crossref_prefixes:find(type) then
+                local target = cite.citations[i].id:match('^%a+:(.*)')
+                if old_identifiers:find(type .. ':' .. target) then
+                    target = prefix .. target
+                    cite.citations[i].id = type .. ':' .. target
+                end
+            end
+        end
+        return cite
+    end
 
     div = pandoc.walk_block(pandoc.Div(doc.blocks), {
-        Link = add_prefix_to_link
+        Link = add_prefix_to_link,
+        Cite = pandoc_crossref and add_prefix_to_crossref_cites
     })
     doc.blocks = div.content
 
@@ -226,6 +309,7 @@ return {
         Pandoc = process_doc
     }
 }
+
 ]]
 
 -- # Collection functions
@@ -476,6 +560,13 @@ function import_sources(doc, tmpdir)
 			end
 		end
 
+		-- run the isolate filter with a prefix, if needed
+		-- placed here to apply before pandoc-crossref
+		if isolate then
+			arguments:extend({'-L', isolate_filter_fpath, 
+			'-M', 'prefix-ids-prefix='.. string.format(isolate_prefix_pattern, i) })	
+		end
+
 		-- add any generic defaults and metadata
 		-- if no local ones provided or if we're asked to merge
 		if generic_meta_fpath ~= '' then
@@ -495,12 +586,6 @@ function import_sources(doc, tmpdir)
 		end 
 		if local_defaults_fpath ~= '' then
 			arguments:extend({'--defaults', local_defaults_fpath})
-		end
-
-		--		run the isolate filter with a prefix, if needed
-		if isolate then
-			arguments:extend({'-L', isolate_filter_fpath, 
-			'-M', 'isolate-prefix='.. string.format(isolate_prefix_pattern, i) })	
 		end
 
 		--		match verbosity

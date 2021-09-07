@@ -144,22 +144,26 @@ function save_meta_as_yaml(map,filepath)
 
 end
 
--- # Isolate filter
---		This filter will be ran on imported document if we need to isolate them
---		Needs to be a saved as a temporary file to do so
-isolate_filter = [[
----- # Prefix-ids - Prefixings all ids in a Pandoc document
+-- # Internal filters
 
--- @author Julien Dutant <julien.dutant@kcl.ac.uk>
--- @copyright 2021 Julien Dutant
--- @license MIT - see LICENSE file for details.
--- @release 0.1
-
+--- prefix_crossref_ids_filter, prefix_ids_filter: filters to prefix
+-- sources's ids and links to avoid conflicts between sources.  
+-- These two filters will be ran on imported sources if we need to isolate
+-- their internal crossreferences from other sources
+-- The first filter, applied before the user's, handles Pandoc-crossref 
+-- crossreferences. The second, applied after, handles remaining 
+-- crossreferences. 
+prefix_crossref_ids_filter = [[
 -- # Global variables
-local prefix = ''
-local old_identifiers = pandoc.List:new()
-local pandoc_crossref = true
-local crossref_prefixes = pandoc.List:new({'fig','sec','eq','tbl','lst'})
+local prefix = '' -- user's custom prefix
+local old_identifiers = pandoc.List:new() -- identifiers removed
+local new_identifiers = pandoc.List:new() -- identifiers added
+local pandoc_crossref = true -- do we process pandoc-crossref links?
+local crossref_prefixes = pandoc.List:new({'fig','sec','eq','tbl','lst',
+        'Fig','Sec','Eq','Tbl','Lst'})
+local crossref_str_prefixes = pandoc.List:new({'eq','tbl','lst',
+        'Eq','Tbl','Lst'}) -- found in Str elements (captions or after eq)
+local codeblock_captions = true -- is the codeblock caption syntax on?
 
 --- get_options: get filter options for document's metadata
 -- @param meta pandoc Meta element
@@ -191,6 +195,216 @@ function get_options(meta)
         end
         
     end
+
+    -- if meta.codeBlockCaptions is false then we should *not*
+    -- process `lst:label` identifiers that appear in Str elements
+    -- (that is, in codeblock captions). We will still convert
+    -- those that appear as CodeBlock attributes
+    if not meta.codeBlockCaptions then
+        codeblock_captions = false
+        crossref_str_prefixes = crossref_str_prefixes:filter(
+            function(item) return item ~= 'lst' end)
+    end
+
+    return meta
+end
+
+--- process_doc: process the pandoc document
+-- generates a prefix is needed, walk through the document
+-- and adds a prefix to all elements with identifier.
+-- @param pandoc Pandoc element
+-- @TODO handle meta fields that may contain identifiers? abstract
+-- and thanks?
+function process_doc(doc)
+
+    -- generate prefix if needed
+    if prefix == '' then
+        prefix = pandoc.utils.sha1(pandoc.utils.stringify(doc.blocks))
+    end
+
+    -- add_prefix function
+    -- check that it's a pandoc-crossref type
+    -- do not add prefixes to empty identifiers
+    -- store the old identifiers to later fix links
+    add_prefix = function (el)
+        if el.identifier and el.identifier ~= '' then
+            -- if pandoc-crossref type, we add the prefix after "fig:", "tbl", ...
+            -- though (like pandoc-crossref) we must ignore #lst:label unless there's 
+            -- a caption attribute or the codeblock caption syntax is on
+            if pandoc_crossref then
+                local type, identifier = el.identifier:match('^(%a+):(.*)')
+                if type and identifier and crossref_prefixes:find(type) then
+                    -- special case in which we don't touch it:
+                    -- a codeblock with #lst:label id but no caption
+                    -- nor caption table syntax on
+                    if el.t == 'CodeBlock' and not codeblock_captions 
+                        and type == 'lst' and (not el.attributes
+                            or not el.attributes.caption) then
+                        return
+                    -- in all other cases we add prefix between `type`
+                    -- and `identifier`
+                    -- NOTE: in principle we should check that if it's
+                    -- a codeblock it has a caption paragraph before or
+                    -- after, but that requires going through the doc
+                    -- el by el, not worth it. 
+                    else
+                        old_identifiers:insert(type .. ':' .. identifier)
+                        new_id =  type .. ':' .. prefix .. identifier
+                        el.identifier = new_id
+                        new_identifiers:insert(new_id)
+                        return el
+                    end
+                end
+            end
+            -- if no pandoc_crossref action was taken, apply simple prefix
+            old_identifiers:insert(el.identifier)
+            new_id = prefix .. el.identifier
+            el.identifier = new_id
+            new_identifiers:insert(new_id)
+            return el
+        end
+    end
+   -- add_prefix_string function
+    -- handles {#eq:label} for equations and {#tbl:label} or {#lst:label}
+    -- in table or listing captions. 
+    add_prefix_string = function(el)
+        local type, identifier = el.text:match('^{#(%a+):(.*)}')
+        if type and identifier and crossref_str_prefixes:find(type) then
+            old_identifiers:insert(type .. ':' .. identifier)
+            local new_id = type .. ':' .. prefix .. identifier
+            new_identifiers:insert(new_id)
+            return pandoc.Str('{#' .. new_id .. '}')
+        end
+    end
+
+
+    -- apply the function to all elements with pandoc-crossref identifiers
+    local div = pandoc.walk_block(pandoc.Div(doc.blocks), {
+        Image = add_prefix,
+        Header = add_prefix,
+        Table = add_prefix,
+        CodeBlock = add_prefix,
+        Str = add_prefix_string,
+    })
+    doc.blocks = div.content
+
+   -- function to add prefixes to links
+    local add_prefix_to_link = function (link)
+        if link.target:sub(1,1) == '#' 
+          and old_identifiers:find(link.target:sub(2,-1)) then
+            local target = link.target:sub(2,-1)
+            local type = target:match('^(%a+):')
+            if crossref_prefixes:find(type) then
+                link.target = '#' .. type .. ':' .. prefix 
+                    .. target:match('^%a+:(.*)')
+                return link
+            end
+        end
+    end
+    -- function to add prefixes to pandoc-crossref citations
+    -- looking for keys starting with `fig:`, `sec:`, `eq:`, ... 
+    local add_prefix_to_crossref_cites = function (cite)
+        for i = 1, #cite.citations do
+            local type, identifier = cite.citations[i].id:match('^(%a+):(.*)')
+            if type and identifier and crossref_prefixes:find(type) then
+                -- put the type in lowercase to match Fig: and fig:
+                -- note that sec: cites might refer to an old identifier
+                -- that doesn't start with sec:
+                local stype = pandoc.text.lower(type)
+                if old_identifiers:find(stype..':'..identifier) or
+                  (stype == 'sec' and old_identifiers:find(identifier))
+                  then
+                    cite.citations[i].id = type..':'..prefix..identifier
+                end
+            end
+        end
+        return cite
+    end
+
+    div = pandoc.walk_block(pandoc.Div(doc.blocks), {
+        Link = add_prefix_to_link,
+        Cite = add_prefix_to_crossref_cites
+    })
+    doc.blocks = div.content
+
+    -- set metadata (in case prefix-ids is ran later on)
+    -- save a list of ids changed
+    if not doc.meta['prefix-ids'] then
+        doc.meta['prefix-ids'] = pandoc.MetaMap({})
+    end
+    doc.meta['prefix-ids'].ignoreids = pandoc.MetaList(new_identifiers)
+
+    -- return the result
+    return doc
+
+end
+
+-- # Main filter
+return {
+    {
+        Meta = get_options,
+        Pandoc = function(doc) 
+            if pandoc_crossref then return process_doc(doc) end
+        end,
+    }
+}
+]]
+
+prefix_ids_filter = [[
+-- # Global variables
+local prefix = '' -- user's custom prefix
+local old_identifiers = pandoc.List:new() -- identifiers removed
+local ids_to_ignore = pandoc.List:new() -- identifiers to ignore
+local pandoc_crossref = true -- do we process pandoc-crossref links?
+local crossref_prefixes = pandoc.List:new({'fig','sec','eq','tbl','lst'})
+local crossref_str_prefixes = pandoc.List:new({'eq','tbl','lst'}) -- in Str elements
+local codeblock_captions = true -- is the codeblock caption syntax on?
+
+--- get_options: get filter options for document's metadata
+-- @param meta pandoc Meta element
+function get_options(meta)
+
+    -- syntactic sugar: options aliases
+    -- merging behaviour: aliases prevail
+    local aliases = {'prefix', 'pandoc-crossref'}
+    for _,alias in ipairs(aliases) do
+        if meta['prefix-ids-' .. alias] ~= nil then
+            -- create a 'prefix-ids' key if needed
+            if not meta['prefix-ids'] then
+                meta['prefix-ids'] = pandoc.MetaMap({})
+            end
+            meta['prefix-ids'][alias] = meta['prefix-ids-' .. alias]
+            meta['prefix-ids-' .. alias] = nil
+        end
+    end
+
+    -- save options in global variables
+    if meta['prefix-ids'] then
+
+        if meta['prefix-ids']['prefix'] then
+            prefix = pandoc.utils.stringify(meta['prefix-ids']['prefix'])
+        end
+        if meta['prefix-ids']['pandoc-crossref'] ~= nil 
+          and meta['prefix-ids']['pandoc-crossref'] == false then
+            pandoc_crossref = false
+        end
+        if meta['prefix-ids'].ignoreids and 
+            meta['prefix-ids'].ignoreids.t == 'MetaList' then
+            ids_to_ignore:extend(meta['prefix-ids'].ignoreids)
+        end
+        
+    end
+
+    -- if meta.codeBlockCaptions is false then we should *not*
+    -- process `lst:label` identifiers that appear in Str elements
+    -- (that is, in codeblock captions). We will still convert
+    -- those that appear as CodeBlock attributes
+    if not meta.codeBlockCaptions then
+        codeblock_captions = false
+        crossref_str_prefixes = crossref_str_prefixes:filter(
+            function(item) return item ~= 'lst' end)
+    end
+
     return meta
 end
 
@@ -211,36 +425,55 @@ function process_doc(doc)
     -- do not add prefixes to empty identifiers
     -- store the old identifiers for fixing the links
     add_prefix = function (el) 
-        if el.identifier and el.identifier ~= '' then
-            old_identifiers:insert(el.identifier)
-            local new_identifier = ''
-            -- if pandoc-crossref type, we add the prefix after "fig:"
-            if pandoc_crossref then 
-                local type = el.identifier:match('^(%a+):')
-                if crossref_prefixes:find(type) then
-                    new_identifier = type .. ':' .. prefix 
-                        .. el.identifier:match('^%a+:(.*)')
-                else
-                    new_identifier = prefix .. el.identifier
+        if el.identifier and el.identifier ~= '' 
+            and not ids_to_ignore:find(el.identifier) then
+            -- if pandoc-crossref type, we add the prefix after "fig:", "tbl", ...
+            -- though (like pandoc-crossref) we must ignore #lst:label unless there's 
+            -- a caption attribute or the codeblock caption syntax is on
+            if pandoc_crossref then
+                local type, identifier = el.identifier:match('^(%a+):(.*)')
+                if type and identifier and crossref_prefixes:find(type) then
+                    -- special case in which we don't touch it:
+                    -- a codeblock with #lst:label id but no caption
+                    -- nor caption table syntax on
+                    if el.t == 'CodeBlock' and not codeblock_captions 
+                        and type == 'lst' and (not el.attributes
+                            or not el.attributes.caption) then
+                        return
+                    -- in all other cases we add prefix between `type`
+                    -- and `identifier`
+                    -- NOTE: in principle we should check that if it's
+                    -- a codeblock it has a caption paragraph before or
+                    -- after, but that requires going through the doc
+                    -- el by el, not worth it. 
+                    else
+                        old_identifiers:insert(type .. ':' .. identifier)
+                        el.identifier =  type .. ':' .. prefix .. identifier
+                        return el
+                    end
                 end
-            else
-                new_identifier = prefix .. el.identifier
             end
-            el.identifier = new_identifier
+            -- if no pandoc_crossref action was taken, apply simple prefix
+            old_identifiers:insert(el.identifier)
+            el.identifier = prefix .. el.identifier
             return el
         end
     end
     -- add_prefix_string function
     -- same as add_prefix but for pandoc-crossref "{eq:label}" strings
+    -- crossref_srt_prefixes tell us which ones to convert
     add_prefix_string = function(el)
-        local eq_identifier = el.text:match('{#eq:(.*)}')
-        if eq_identifier then
-            old_identifiers:insert('eq:' .. eq_identifier)
-            return pandoc.Str('{#eq:' .. prefix .. eq_identifier .. '}')
+        local type, identifier = el.text:match('^{#(%a+):(.*)}')
+        if type and identifier 
+          and crossref_str_prefixes:find(type)
+          and not ids_to_ignore:find(type .. ':' .. identifier) then
+            old_identifiers:insert(type .. ':' .. identifier)
+            local new_id = type .. ':' .. prefix .. identifier
+            return pandoc.Str('{#' .. new_id .. '}')
         end
     end
 
-    -- apply the function to all elements with identifier
+    -- apply the functions to all elements with identifier
     local div = pandoc.walk_block(pandoc.Div(doc.blocks), {
         Span = add_prefix,
         Link = add_prefix,
@@ -261,10 +494,9 @@ function process_doc(doc)
             local target = link.target:sub(2,-1)
             -- handle pandoc-crossref types targets if needed
             if pandoc_crossref then
-                local type = target:match('^(%a+):')
-                if crossref_prefixes:find(type) then
-                    target = '#' .. type .. ':' .. prefix 
-                        .. target:match('^%a+:(.*)')
+                local type, identifier = target:match('^(%a+):(.*)')
+                if type and crossref_prefixes:find(type) then
+                    target = '#' .. type .. ':' .. prefix .. identifier
                 else
                     target = '#' .. prefix .. target
                 end
@@ -279,12 +511,16 @@ function process_doc(doc)
     -- looking for keys starting with `fig:`, `sec:`, `eq:`, ... 
     local add_prefix_to_crossref_cites = function (cite)
         for i = 1, #cite.citations do
-            local type = cite.citations[i].id:match('^(%a+):')
-            if crossref_prefixes:find(type) then
-                local target = cite.citations[i].id:match('^%a+:(.*)')
-                if old_identifiers:find(type .. ':' .. target) then
-                    target = prefix .. target
-                    cite.citations[i].id = type .. ':' .. target
+            local type, identifier = cite.citations[i].id:match('^(%a+):(.*)')
+            if type and identifier and crossref_prefixes:find(type) then
+                -- put the type in lowercase to match Fig: and fig:
+                -- note that sec: cites might refer to an old identifier
+                -- that doesn't start with sec:
+                local stype = pandoc.text.lower(type)
+                if old_identifiers:find(stype..':'..identifier) or
+                  (stype == 'sec' and old_identifiers:find(identifier))
+                  then
+                    cite.citations[i].id = type..':'..prefix..identifier
                 end
             end
         end
@@ -429,7 +665,7 @@ function import_sources(doc, tmpdir)
 	local generic_defaults_fpath = ''
 	local generic_mode = 'native'
 
-	-- Do we need to pass generic metadata? If yes, get/make a file
+	-- Do we need to pass generic metadata? 
 	-- If yes, prepare a temp file
 	if doc.meta['global-metadata'] or doc.meta['child-metadata'] then
 		generic_meta_fpath = path.join( { tmpdir , 'generic_meta.yaml' })
@@ -454,7 +690,7 @@ function import_sources(doc, tmpdir)
 	-- print(file:read('a'))
 	-- file:close()
 
-  	-- set a default import mode
+  	-- set a generic import mode
 	if doc.meta.collection and doc.meta.collection['mode'] then
 		str = utils.stringify(doc.meta.collection['mode'])
 		if acceptable_modes:find(str) then
@@ -462,17 +698,24 @@ function import_sources(doc, tmpdir)
 		end
 	end
 
-	-- if the `isolate.lua` filter is needed, save it as tmp file
-	-- and get the user-specified custom isolate prefix if any
+	-- will we need our internal filters? 
+	-- if yes, save them as tmp files
+	-- for the isolate filter, get any user-specified custom prefix pattern
 	local isolate_prefix_pattern = "c%d-"
-	local isolate_filter_fpath = ''
+	local prefix_ids_filter_fpath = ''
+	local prefix_crossref_ids_filter_fpath = ''
 	if setup.needs_isolate_filter then
 		if doc.meta.collection['isolate-prefix-pattern'] then
 			isolate_prefix_pattern = utils.stringify(doc.meta.collection['isolate-prefix-pattern'])
 		end
-		isolate_filter_fpath = path.join( { tmpdir , 'isolate.lua' })
-		local file = io.open(isolate_filter_fpath, 'w')
-		file:write(isolate_filter)
+		prefix_ids_filter_fpath = path.join({tmpdir, 'prefix-ids.lua'})
+		prefix_crossref_ids_filter_fpath = path.join({tmpdir, 
+			'prefix-crossref-ids.lua'})
+		local file = io.open(prefix_ids_filter_fpath, 'w')
+		file:write(prefix_ids_filter)
+		file:close()
+		local file = io.open(prefix_crossref_ids_filter_fpath, 'w')
+		file:write(prefix_crossref_ids_filter)
 		file:close()
 	end
 
@@ -560,11 +803,14 @@ function import_sources(doc, tmpdir)
 			end
 		end
 
-		-- run the isolate filter with a prefix, if needed
-		-- placed here to apply before pandoc-crossref
+		-- if isolate, add a prefix and apply the pandoc-crossref
+		-- filter upfront 
 		if isolate then
-			arguments:extend({'-L', isolate_filter_fpath, 
-			'-M', 'prefix-ids-prefix='.. string.format(isolate_prefix_pattern, i) })	
+			arguments:extend({
+				'-M', 'prefix-ids-prefix=' .. 
+					string.format(isolate_prefix_pattern, i),
+				'-L', prefix_crossref_ids_filter_fpath,
+			})	
 		end
 
 		-- add any generic defaults and metadata
@@ -593,6 +839,11 @@ function import_sources(doc, tmpdir)
 			arguments:insert('--verbose')
 		elseif PANDOC_STATE.verbosity == 'ERROR' then
 			arguments:insert('--quiet')
+		end
+
+		-- if isolate, apply the prefix-ids filter last
+		if isolate then
+			arguments:extend({'-L', prefix_ids_filter_fpath})	
 		end
 
 		-- 	function to inform users of the command we're running
@@ -789,7 +1040,7 @@ function syntactic_sugar(meta)
 		end
 	end
 
-	if meta.collection.t ~= 'MetaMap' then
+	if meta.collection and meta.collection.t ~= 'MetaMap' then
 		local filepath = utils.stringify(meta.collection)
 		message('INFO', 'Assuming `collection` is a defaults file ' 
 			.. 'filepath: ' .. filepath .. '.' )

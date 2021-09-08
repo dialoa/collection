@@ -1,7 +1,7 @@
 ---
 title: My collection
 collection:
-    mode: raw
+    mode: native
     isolate: true
     isolate-prefix-pattern: 'chap-%d-'
     defaults: resources/chapter.yaml

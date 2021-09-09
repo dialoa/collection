@@ -614,12 +614,14 @@ Overall structure:
 metadata: # alias `child-metadata`
 global: # alias `global-metadata`
 collection:
-  gather: 
+  gather:
+  replace:
   globalize:
   pass:
   defaults:
 offprints:
   gather: 
+  replace:
   globalize:
   pass:
   defaults:
@@ -665,6 +667,15 @@ key is present in several documents, it will be turned into a list. This
 behaviour is useful for `header-includes` and `bibliography`. Example:
 `gather: [bibliography, header-includes]`.
 
+`collection/gather`
+: list of metadata keys replaced by those from sources. If the key is 
+already present in the main document, its value is replaced with the 
+value it has (if any) in the source. If the source doesn't have that
+key, nothing is changed. Useful in offprint mode, to get the value of
+the key in that source (e.g. author, starting page, etc.). In 
+collection mode, the latest value found (e.g., that of the last source)
+prevails. 
+
 `collection/pass`
 : metadata keys passed to sources before import. Example: 
 `pass: [volume,issue]`
@@ -702,11 +713,6 @@ sources.
       author: Jane Doe
       date: 22 june 2021
   ```
-
-
-
-
-
 
 
 

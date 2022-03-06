@@ -117,7 +117,7 @@ function to_json(doc)
     end
 
     -- catch the result in the `text` field of the first block
-    -- return nil if faileds
+    -- return nil if failed
     return result.blocks[1].c[2] or nil
 
 end
@@ -1182,9 +1182,7 @@ end
 -- syntactic sugar: normalize alias keys in meta
 return {
     {
-        Meta = function(meta)
-            return syntactic_sugar(meta)
-        end,
+        Meta = syntactic_sugar,
         Pandoc = function(doc)
             doc.meta = prepare(doc.meta)
             return build(doc)

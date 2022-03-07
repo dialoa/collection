@@ -611,8 +611,8 @@ imports:
 Overall structure:
 
 ```yaml
-metadata: # alias `child-metadata`
-global: # alias `global-metadata`
+child-metadata: # alias `metadata`
+global-metadata: # alias `global`
 collection:
   gather:
   replace:
@@ -628,7 +628,7 @@ offprints:
 imports:
 - file: 
   defaults:
-  metadata: # alias of child-metadata
+  child-metadata: # alias of metadata
 
 ```
 
@@ -639,7 +639,7 @@ is a key within a map (or list of maps) in `key`.
 : map of YAML metadata passed to sources before import
 
 `global` alias `global-metadata`
-: map of YAML metadata passed to sources under the key `global` before import
+: map of YAML metadata passed to sources under the key `global-metadata` before import
 
 `collection`
 : map of collection options, or string giving the filepath of a defaults
@@ -667,7 +667,7 @@ key is present in several documents, it will be turned into a list. This
 behaviour is useful for `header-includes` and `bibliography`. Example:
 `gather: [bibliography, header-includes]`.
 
-`collection/gather`
+`collection/replace`
 : list of metadata keys replaced by those from sources. If the key is 
 already present in the main document, its value is replaced with the 
 value it has (if any) in the source. If the source doesn't have that

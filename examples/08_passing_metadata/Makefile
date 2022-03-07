@@ -3,8 +3,8 @@ FILPATH ?= ../../
 
 .PHONY: test
 
-test: $(FILPATH)collection.lua expected.html master.md src1.md src2.md
-	@pandoc -L $(FILPATH)collection.lua master.md -t html --verbose | $(DIFF) expected.html -
+test: $(FILPATH)collection.lua expected.tex master.md src1.md src2.md
+	@pandoc -L $(FILPATH)collection.lua master.md -s -t latex --verbose | $(DIFF) expected.tex -
 
-expected.html: $(FILPATH)collection.lua master.md src1.md src2.md
-	@pandoc -L $(FILPATH)collection.lua master.md -o expected.html
+expected.tex: $(FILPATH)collection.lua master.md src1.md src2.md
+	@pandoc -L $(FILPATH)collection.lua master.md -s -o expected.tex

@@ -1,7 +1,7 @@
 ---
 imports:
-- section1.md
-- section2.md
+- chapter2/section1.md
+- chapter2/section2.md
 ---
 
 # Two

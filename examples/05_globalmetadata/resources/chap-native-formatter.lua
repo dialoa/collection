@@ -7,9 +7,11 @@ return {{
 
 		local modified = false
 
-		if doc.meta.global and doc.meta.global.volume then
-			local vol = pandoc.utils.stringify(doc.meta.global.volume)
-			doc.blocks:insert(1, pandoc.Para{pandoc.Str('The filter understands this is from volume: ' .. vol)})
+		if doc.meta['global-metadata'] 
+			and doc.meta['global-metadata'].volume then
+			local vol = pandoc.utils.stringify(doc.meta['global-metadata'].volume)
+			doc.blocks:insert(1, pandoc.Para{
+				pandoc.Str('The filter understands this is from volume: ' .. vol)})
 			modified = true
 		end
 

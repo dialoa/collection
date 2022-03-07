@@ -1,12 +1,12 @@
 <h1 id="introduction">Introduction</h1>
-<p>This illustrates the offprint mode. We generate one output for the full collection and one for each chapter. Different defaults files are used for the collection and offprints. To do this we run:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">-L</span> collection.lua master.md <span class="at">-o</span> expected-collection.html</span>
+<p>This illustrates the offprint mode. We generate one output for the
+full collection and one for each chapter. Different defaults files are
+used for the collection and offprints. To do this we run:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">-L</span> collection.lua master.md <span class="at">-o</span> expected-collection.html</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">-L</span> collection.lua master.md <span class="at">-M</span> offprint-mode=1 expected-chap1.html</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">-L</span> collection.lua master.md <span class="at">-M</span> offprint-mode=1 expected-chap2.html</span></code></pre></div>
-<p>In this example the defaults file for the collection generates a full standalone document while the one for offprints a body only.</p>
-<p>Note that any text in the master file is included at the beginning of each offprint.</p>
-<div>
-	<h1>This is a chapter as standalone offprint</h1>
-	<h2 id="two">Two</h2>
- <p>Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor eget felis porttitor volutpat. Vivamus suscipit tortor eget felis porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur non nulla sit amet nisl tempus convallis quis ac lectus.</p>
-</div>
+<p>In this example the defaults file for the collection generates a full
+standalone document while the one for offprints a body only.</p>
+<p>Note that any text in the master file is included at the beginning of
+each offprint.</p>

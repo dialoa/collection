@@ -1,9 +1,20 @@
 <h1 id="introduction">Introduction</h1>
-<p>This introduction is written in the master document itself. The imported files are placed after it.</p>
-<p>This collection illustrates the simplest use of the filter. By default chapters are imported in native mode. Without defaults (in particular, filters) applied to the imported chapter, using <code>collection.lua</code> is overkill: we could have achieved the same by simply running <code>pandoc master.md chapter1.md chapter2.md -o expected.html</code>. Using <code>collection.lua</code> is less efficient, since Pandoc is executed on each chapter as well as on the entire document.</p>
-<p>The Makefile executes two commands, one that generates the entire collection and one that generates an offprint of the second item in our <code>imports</code> list:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">-L</span> ../../collection.lua master.md <span class="at">-o</span> expected.html</span>
+<p>This introduction is written in the master document itself. The
+imported files are placed after it.</p>
+<p>This collection illustrates the simplest use of the filter. By
+default chapters are imported in native mode. Without defaults (in
+particular, filters) applied to the imported chapter, using
+<code>collection.lua</code> is overkill: we could have achieved the same
+by simply running
+<code>pandoc master.md chapter1.md chapter2.md -o expected.html</code>.
+Using <code>collection.lua</code> is less efficient, since Pandoc is
+executed on each chapter as well as on the entire document.</p>
+<p>The Makefile executes two commands, one that generates the entire
+collection and one that generates an offprint of the second item in our
+<code>imports</code> list:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">-L</span> ../../collection.lua master.md <span class="at">-o</span> expected.html</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">-L</span> ../../collection.lua master.md <span class="at">-M</span> offprint=2 <span class="at">-o</span> expected_offprint.html</span></code></pre></div>
-<p>Note that the body text of <code>master.md</code> is printed in all outputs (collection and offprints). It is suited for a cover, not a preface.</p>
-<h1 id="two">Two</h1>
-<p>Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor eget felis porttitor volutpat. Vivamus suscipit tortor eget felis porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur non nulla sit amet nisl tempus convallis quis ac lectus.</p>
+<p>Note that the body text of <code>master.md</code> is printed in all
+outputs (collection and offprints). It is suited for a cover, not a
+preface.</p>

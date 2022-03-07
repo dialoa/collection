@@ -1,10 +1,9 @@
---[[-- # Collection builder - a Lua filter to build
-volumes and journal issues in Pandoc's markdown
+--[[-- # Collection builder - Building collections with Pandoc
 
 @author Julien Dutant <julien.dutant@kcl.ac.uk>
 @copyright 2021 Julien Dutant
 @license MIT - see LICENSE file for details.
-@release 0.3
+@release 0.5
 ]]
 
 -- # Filter settings
@@ -30,7 +29,7 @@ env.input_folder = path.directory(PANDOC_STATE['input_files'][1])
 local setup = {
     do_something = false, -- whether the filter needs to do anything
     isolate = false, -- whether to isolate sources by default
-    needs_isolate_filter = false, -- whether the isolate filter is needed
+    needs_isolate_filter = false, -- whether the prefix-ids filters are needed
     offprint_mode = false, -- whether we're in offprint mode
 }
 
@@ -48,25 +47,50 @@ function message(type, text)
     end
 end
 
+--- type: pandoc-friendly type function
+-- utils.type is only defined in Pandoc >= 2.17
+-- if it isn't, we extend Lua's type function to give the same values
+-- as pandoc.utils.type on Meta objects: Inlines, Inline, Blocks, Block,
+-- string and booleans
+-- Caution: not to be used on non-Meta Pandoc elements, the 
+-- results will differ (only 'Block', 'Blocks', 'Inline', 'Inlines' in
+-- >=2.17, the .t string in <2.17).
+local type = utils.type or function (obj)
+        local tag = type(obj) == 'table' and obj.t and obj.t:gsub('^Meta', '')
+        return tag and tag ~= 'Map' and tag or type(obj)
+    end
+
 --- to_json: converts a entire Pandoc document to json
--- run_json_filter passes a Pandoc object as json to stdin
--- we use regex to put it in the RawBlock of a wrapping json
--- representation of a Pandoc object, so that we can
--- recover the json string.
--- @param doc pandoc Pandoc object
--- @string if success, nil if failed
+-- @param doc pandoc Pandoc object to be converted to json
+-- @return string json string representation if success, nil if failed
 -- @TODO in Win, use Python or Perl if present, powershell is slow
 function to_json(doc)
 
-    -- check that doc is a Pandoc object
+    -- in Pandoc >= 2.17, we can simply use pandoc.write
+    if PANDOC_VERSION >= '2.17' then
+        if pandoc.utils.type(doc) == 'Pandoc' then
+            return pandoc.write(doc, 'json')
+        else
+            return nil
+        end
+    end
+
+    -- in Pandoc <= 2.17, first confirm that doc is Pandoc object
     if not (doc.meta and doc.blocks) then
         return nil
     end
-    -- prepare command to wrap json stdin in a json representation
-    -- of a Pandoc document. Use sed on *nix and powershell on windows
+
+    -- pandoc.utils.run_json_filter(doc, command) converts the Pandoc
+    -- doc to its JSON representation, sends it to stdin, executes
+    -- `command` expects a JSON representation of a Pandoc document 
+    -- return. Our `command` simply wraps the json string Pandoc 
+    -- stands to stdin in (a JSON representation) of a Pandoc document
+    -- with a Rawblock containing that string. 
+    -- we use `sed` on MacOs/Linux systems and Powershell on Win.
     local command = ''
     local arguments = pandoc.List:new()
-    --  strings to build an empty document with a RawBlock element
+    -- strings to build an json representation of an empty document 
+    -- with a RawBlock element
     local api_ver_str = tostring(PANDOC_API_VERSION):gsub('%.',',')
     local before = '{"pandoc-api-version":[' .. api_ver_str .. '],'
         .. [["meta":{},"blocks":[{"t":"RawBlock","c":["json","]]
@@ -118,7 +142,7 @@ function to_json(doc)
 
     -- catch the result in the `text` field of the first block
     -- return nil if failed
-    return result.blocks[1].c[2] or nil
+    return result.blocks[1].text or nil
 
 end
 
@@ -165,6 +189,19 @@ local crossref_prefixes = pandoc.List:new({'fig','sec','eq','tbl','lst',
 local crossref_str_prefixes = pandoc.List:new({'eq','tbl','lst',
         'Eq','Tbl','Lst'}) -- found in Str elements (captions or after eq)
 local codeblock_captions = true -- is the codeblock caption syntax on?
+
+--- type: pandoc-friendly type function
+-- pandoc.utils.type is only defined in Pandoc >= 2.17
+-- if it isn't, we extend Lua's type function to give the same values
+-- as pandoc.utils.type on Meta objects: Inlines, Inline, Blocks, Block,
+-- string and booleans
+-- Caution: not to be used on non-Meta Pandoc elements, the 
+-- results will differ (only 'Block', 'Blocks', 'Inline', 'Inlines' in
+-- >=2.17, the .t string in <2.17).
+local type = pandoc.utils.type or function (obj)
+        local tag = type(obj) == 'table' and obj.t and obj.t:gsub('^Meta', '')
+        return tag and tag ~= 'Map' and tag or type(obj)
+    end
 
 --- get_options: get filter options for document's metadata
 -- @param meta pandoc Meta element
@@ -299,20 +336,17 @@ function process_doc(doc)
     end
 
     -- prefix identifiers in doc and in metadata fields with blocks content
-    -- NB: we can't use element.t if the value is a boolean
     for key,val in pairs(doc.meta) do
-        if not (val == true or val == false or val == nil) then
-            if val.t == 'MetaBlocks' then
-              doc.meta[key] = pandoc.MetaBlocks(
-                            process_identifiers(pandoc.List(val))
-                        )
-            elseif val.t == 'MetaList' then
-                for i = 1, #val do
-                    if val[i].t == 'MetaBlocks' then
-                        doc.meta[key][i] = pandoc.MetaBlocks(
-                            process_identifiers(pandoc.List(val[i]))
-                        )
-                    end
+        if type(val) == 'Blocks' then
+          doc.meta[key] = pandoc.MetaBlocks(
+                        process_identifiers(pandoc.List(val))
+                    )
+        elseif type(val) == 'List' then
+            for i = 1, #val do
+                if type(val[i]) == 'Blocks' then
+                    doc.meta[key][i] = pandoc.MetaBlocks(
+                        process_identifiers(pandoc.List(val[i]))
+                    )
                 end
             end
         end
@@ -360,21 +394,18 @@ function process_doc(doc)
         return div.content
     end
 
-     -- process links and cites in doc and in metablocks fields
-    -- NB: we can't use element.t if the value is a boolean
+    -- process links and cites in doc and in metablocks fields
     for key,val in pairs(doc.meta) do
-        if not (val == true or val == false or val == nil) then
-            if val.t == 'MetaBlocks' then
-              doc.meta[key] = pandoc.MetaBlocks(
-                            process_links(pandoc.List(val))
-                        )
-            elseif val.t == 'MetaList' then
-                for i = 1, #val do
-                    if val[i].t == 'MetaBlocks' then
-                        doc.meta[key][i] = pandoc.MetaBlocks(
-                            process_links(pandoc.List(val[i]))
-                        )
-                    end
+        if type(val) == 'Blocks' then
+          doc.meta[key] = pandoc.MetaBlocks(
+                        process_links(pandoc.List(val))
+                    )
+        elseif type(val) == 'List' then
+            for i = 1, #val do
+                if type(val[i]) == 'Blocks' then
+                    doc.meta[key][i] = pandoc.MetaBlocks(
+                        process_links(pandoc.List(val[i]))
+                    )
                 end
             end
         end
@@ -414,6 +445,20 @@ local crossref_prefixes = pandoc.List:new({'fig','sec','eq','tbl','lst'})
 local crossref_str_prefixes = pandoc.List:new({'eq','tbl','lst'}) -- in Str elements
 local codeblock_captions = true -- is the codeblock caption syntax on?
 
+--- type: pandoc-friendly type function
+-- pandoc.utils.type is only defined in Pandoc >= 2.17
+-- if it isn't, we extend Lua's type function to give the same values
+-- as pandoc.utils.type on Meta objects: Inlines, Inline, Blocks, Block,
+-- string and booleans
+-- Caution: not to be used on non-Meta Pandoc elements, the 
+-- results will differ (only 'Block', 'Blocks', 'Inline', 'Inlines' in
+-- >=2.17, the .t string in <2.17).
+local type = pandoc.utils.type or function (obj)
+        local tag = type(obj) == 'table' and obj.t and obj.t:gsub('^Meta', '')
+        return tag and tag ~= 'Map' and tag or type(obj)
+    end
+
+
 --- get_options: get filter options for document's metadata
 -- @param meta pandoc Meta element
 function get_options(meta)
@@ -443,7 +488,7 @@ function get_options(meta)
             pandoc_crossref = false
         end
         if meta['prefix-ids'].ignoreids and 
-            meta['prefix-ids'].ignoreids.t == 'MetaList' then
+            type(meta['prefix-ids'].ignoreids) == 'List' then
             ids_to_ignore:extend(meta['prefix-ids'].ignoreids)
         end
         
@@ -544,20 +589,17 @@ function process_doc(doc)
     end
 
     -- prefix identifiers in doc and in metadata fields with blocks content
-    -- NB: we can't use element.t if the value is a boolean
     for key,val in pairs(doc.meta) do
-        if not (val == true or val == false or val == nil) then
-            if val.t == 'MetaBlocks' then
-              doc.meta[key] = pandoc.MetaBlocks(
-                            process_identifiers(pandoc.List(val))
-                        )
-            elseif val.t == 'MetaList' then
-                for i = 1, #val do
-                    if val[i].t == 'MetaBlocks' then
-                        doc.meta[key][i] = pandoc.MetaBlocks(
-                            process_identifiers(pandoc.List(val[i]))
-                        )
-                    end
+        if type(val) == 'Blocks' then
+          doc.meta[key] = pandoc.MetaBlocks(
+                        process_identifiers(pandoc.List(val))
+                    )
+        elseif type(val) == 'List' then
+            for i = 1, #val do
+                if type(val[i]) == 'Blocks' then
+                    doc.meta[key][i] = pandoc.MetaBlocks(
+                        process_identifiers(pandoc.List(val[i]))
+                    )
                 end
             end
         end
@@ -613,20 +655,17 @@ function process_doc(doc)
     end
 
     -- process links and cites in doc and in metablocks fields
-    -- NB: we can't use element.t if the value is a boolean
     for key,val in pairs(doc.meta) do
-        if not (val == true or val == false or val == nil) then
-            if val.t == 'MetaBlocks' then
-              doc.meta[key] = pandoc.MetaBlocks(
-                            process_links(pandoc.List(val))
-                        )
-            elseif val.t == 'MetaList' then
-                for i = 1, #val do
-                    if val[i].t == 'MetaBlocks' then
-                        doc.meta[key][i] = pandoc.MetaBlocks(
-                            process_links(pandoc.List(val[i]))
-                        )
-                    end
+        if type(val) == 'Blocks' then
+          doc.meta[key] = pandoc.MetaBlocks(
+                        process_links(pandoc.List(val))
+                    )
+        elseif type(val) == 'List' then
+            for i = 1, #val do
+                if type(val[i]) == 'Blocks' then
+                    doc.meta[key][i] = pandoc.MetaBlocks(
+                        process_links(pandoc.List(val[i]))
+                    )
                 end
             end
         end
@@ -687,10 +726,10 @@ function gather_and_replace(meta)
                     if not meta[key] then
                         meta[key] = itemdoc.meta[key]:clone()
                     else
-                        if meta[key].t ~= 'MetaList' then
+                        if type(meta[key]) ~= 'List' then
                             meta[key] = pandoc.MetaList(meta[key])
                         end
-                        if itemdoc.meta[key].t == 'MetaList' then
+                        if type(itemdoc.meta[key]) == 'List' then
                             meta[key]:extend(itemdoc.meta[key])
                         else
                             meta[key]:insert(itemdoc.meta[key])
@@ -768,7 +807,7 @@ function import_sources(doc, tmpdir)
     -- a temp yaml file `default_filename', otherwise assume 
     -- it's a filepath. Either way, return a filepath.
     function save_yaml_if_needed(element, default_filename)
-        if element.t ~= 'MetaMap' then
+        if type(element) ~= 'table' and type(element) ~= 'Meta' then
             return utils.stringify(element)
         else
             local filepath = path.join({tmpdir, default_filename})
@@ -788,8 +827,8 @@ function import_sources(doc, tmpdir)
         generic_meta_fpath = path.join( { tmpdir , 'generic_meta.yaml' })
         -- `child-metadata` goes to the root, `global-metadata` is
         -- inserted as is
-        local metamap = pandoc.MetaMap(doc.meta['child-metadata'])
-        metamap['global-metadata'] = doc.meta['global-metadata']
+        local metamap = pandoc.MetaMap(doc.meta['child-metadata'] or {})
+        metamap['global-metadata'] = doc.meta['global-metadata'] or nil
         save_meta_as_yaml(metamap, generic_meta_fpath)
     end
 
@@ -1023,23 +1062,23 @@ function prepare(meta)
         message('INFO', "No `imports` field in ".. PANDOC_STATE['input_files'][1] 
             .. ", nothing to import.")
         return meta
-    elseif meta.imports.t ~= 'MetaList' then
+    elseif type(meta.imports) ~= 'List' then
         meta.imports = pandoc.MetaList(meta.imports)
     end
     setup.do_something = true
 
     -- ensure each item is a MetaMap; if not, assume it's a filename
-    -- nb, with fix this in the doc itself, in case later filters
-    -- need this info. 
+    -- nb, we change this in the doc itself, in case later filters
+    -- rely on this field too. 
     for i = 1, #meta.imports do
-        if meta.imports[i].t ~= 'MetaMap' then
+        if type(meta.imports[i]) ~= 'table' then
             meta.imports[i] = pandoc.MetaMap({ 
                 file = pandoc.MetaString(utils.stringify(meta.imports[i])) 
             })
         end
     end
     -- bear in mind some `imports` items may still lack a `file` key
-    -- this allows users to deactive a source without removing its data
+    -- this allows users to deactivate a source without removing its data
     -- by changing `file` to `fileoff` for instance
 
     -- offprint mode? if yes we reduce the imports list to that item
@@ -1065,7 +1104,7 @@ function prepare(meta)
     if meta.collection then
         for _,key in ipairs({'gather','replace', 'globalize', 'pass'}) do
             if meta.collection[key] then
-                if meta.collection[key].t ~= 'MetaList' then
+                if type(meta.collection[key]) ~= 'List' then
                     meta.collection[key] = pandoc.MetaList(meta.collection[key])
                 end
                 setup[key] = pandoc.List:new()
@@ -1126,15 +1165,16 @@ function syntactic_sugar(meta)
     -- @root string names the root for error messages, e.g. "imports[1]/"
     -- @map Meta or MetaMap to be cleaned up
     function make_official(alias_table, root, map)
-        for alias,official in pairs(alias_table) do
-            if map[alias] then 
-                if not map[official] then
-                    map[official] = map[alias]
-                    map[alias] = nil
-                else 
+        if type(map) == 'table' or type(map) == 'Meta' then
+            for alias,official in pairs(alias_table) do
+                if map[alias] and map[official] then
                     message('WARNING', 'Metadata: `'..root..alias..'` '
                          ..'is a duplicate of `'..root..official..'`, '
                         ..'it will be ignored.')
+                    map[alias] = nil
+                elseif map[alias] then
+                    map[official] = map[alias]
+                    map[alias] = nil
                 end
             end
         end
@@ -1143,11 +1183,11 @@ function syntactic_sugar(meta)
 
     local aliases = {
         global = 'global-metadata',
-        metadata = 'child-metadata'
+        metadata = 'child-metadata',
     }
     meta = make_official(aliases, '', meta)
 
-    if meta.imports then 
+    if meta.imports and type(meta.imports) == 'List' then 
         local aliases = {
             metadata = 'child-metadata'
         }
@@ -1157,7 +1197,7 @@ function syntactic_sugar(meta)
         end
     end
 
-    if meta.collection and meta.collection.t ~= 'MetaMap' then
+    if meta.collection and type(meta.collection) ~= 'table' then
         local filepath = utils.stringify(meta.collection)
         message('INFO', 'Assuming `collection` is a defaults file ' 
             .. 'filepath: ' .. filepath .. '.' )
@@ -1166,7 +1206,7 @@ function syntactic_sugar(meta)
         })
     end
 
-    if meta.offprints and meta.offprints.t ~= 'MetaMap' then
+    if meta.offprints and type(meta.offprints) ~= 'table' then
         local filepath = utils.stringify(meta.offprints)
         message('INFO', 'Assuming `offprints` is a defaults file ' 
             .. 'filepath: ' .. filepath .. '.' )
@@ -1182,7 +1222,9 @@ end
 -- syntactic sugar: normalize alias keys in meta
 return {
     {
-        Meta = syntactic_sugar,
+        Meta = function(meta)
+            return syntactic_sugar(meta)
+        end,
         Pandoc = function(doc)
             doc.meta = prepare(doc.meta)
             return build(doc)

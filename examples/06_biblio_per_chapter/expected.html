@@ -1,35 +1,102 @@
 <h1 id="introduction">Introduction</h1>
-<p>This is a simple per-chapter bibliography collection, using Citeproc (Pandoc’s built-in bibliography engine). In <code>chapter.yaml</code> we specify that the <code>citeproc</code> filter must be run on each chapter before importing.</p>
-<p>The <strong>isolate</strong> option allows us to avoid link conflicts across chapters. Here both chapters cite <code>@dummettFregePhilosophyLanguage1981</code>. Citeproc generates the same identifier for this reference in chapter 1’s bibliography and in chapter 2’s bibliography. Normally this would have the consequence citation links for this reference are wrong in chapter 2: they would end up linking to chapter 1’s bibliography entry. With <strong>isolate</strong> the <code>collection</code> filter passes each chapter through an (internal) <code>isolate</code> filter before importing it. The filter is run last (after any other filter applied to the chapter), and adds a unique prefix to all identifiers and internal links in that chapter.</p>
+<p>This is a simple per-chapter bibliography collection, using Citeproc
+(Pandoc’s built-in bibliography engine). In <code>chapter.yaml</code> we
+specify that the <code>citeproc</code> filter must be run on each
+chapter before importing.</p>
+<p>The <strong>isolate</strong> option allows us to avoid link conflicts
+across chapters. Here both chapters cite
+<code>@dummettFregePhilosophyLanguage1981</code>. Citeproc generates the
+same identifier for this reference in chapter 1’s bibliography and in
+chapter 2’s bibliography. Normally this would have the consequence
+citation links for this reference are wrong in chapter 2: they would end
+up linking to chapter 1’s bibliography entry. With
+<strong>isolate</strong> the <code>collection</code> filter passes each
+chapter through an (internal) <code>isolate</code> filter before
+importing it. The filter is run last (after any other filter applied to
+the chapter), and adds a unique prefix to all identifiers and internal
+links in that chapter.</p>
 <ul>
-<li><strong>isolate</strong> ensures that there’s no duplicate link targets across chapters (in bibliographies, headings, etc.)</li>
-<li>but <strong>isolate</strong> prevents one from having cross-references across chapters.</li>
+<li><strong>isolate</strong> ensures that there’s no duplicate link
+targets across chapters (in bibliographies, headings, etc.)</li>
+<li>but <strong>isolate</strong> prevents one from having
+cross-references across chapters.</li>
 </ul>
-<p><strong>Isolate</strong> can be set on a per-import basis, and works both in <code>raw</code> and <code>native</code> mode. (Thus unlike Pandoc’s <code>--id-prefix</code> flag, it avoids conflicts even when the output format is other than HTML or DocBook.)</p>
-<p>It is possible to specify the pattern used to add prefixes to identifier, with the <code>isolate-prefix-pattern</code> option. The pattern is a lua pattern containing <code>%d</code>; the <code>%d</code> element will be replaced by the number of the imported file. For instance <code>chap-%d%-</code> will give the prefixes <code>chap-1-</code>, <code>chap-2-</code> and so on. The default pattern is <code>c%d-</code>: <code>c1-</code>, <code>c2-</code>, ….</p>
-<h1 id="chap-1-one">One</h1>
-<p><span class="citation" data-cites="fregeUeberSinnUnd1892 dummettFregePhilosophyLanguage1981">(<a href="#chap-1-ref-fregeUeberSinnUnd1892" role="doc-biblioref">Frege 1892</a>; <a href="#chap-1-ref-dummettFregePhilosophyLanguage1981" role="doc-biblioref">Dummett 1981</a>)</span>. Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin molestie malesuada. Vivamus suscipit tortor eget felis porttitor volutpat. Curabitur aliquet quam id dui posuere blandit. Donec sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at sem.</p>
-<h1 class="unnumbered" id="chap-1-references">References</h1>
-<div id="chap-1-refs" class="references csl-bib-body hanging-indent" role="doc-bibliography">
-<div id="chap-1-ref-dummettFregePhilosophyLanguage1981" class="csl-entry" role="doc-biblioentry">
-Dummett, Michael. 1981. <em>Frege: Philosophy of Language</em>. 2nd ed. <span>London</span>: <span>Duckworth</span>.
+<p><strong>Isolate</strong> can be set on a per-import basis, and works
+both in <code>raw</code> and <code>native</code> mode. (Thus unlike
+Pandoc’s <code>--id-prefix</code> flag, it avoids conflicts even when
+the output format is other than HTML or DocBook.)</p>
+<p>It is possible to specify the pattern used to add prefixes to
+identifier, with the <code>isolate-prefix-pattern</code> option. The
+pattern is a lua pattern containing <code>%d</code>; the <code>%d</code>
+element will be replaced by the number of the imported file. For
+instance <code>chap-%d%-</code> will give the prefixes
+<code>chap-1-</code>, <code>chap-2-</code> and so on. The default
+pattern is <code>c%d-</code>: <code>c1-</code>, <code>c2-</code>, ….</p>
+<h1 id="chap-1-chap-1-one">One</h1>
+<p><span class="citation"
+data-cites="fregeUeberSinnUnd1892 dummettFregePhilosophyLanguage1981">(<a
+href="#chap-1-ref-fregeUeberSinnUnd1892" role="doc-biblioref">Frege
+1892</a>; <a href="#chap-1-ref-dummettFregePhilosophyLanguage1981"
+role="doc-biblioref">Dummett 1981</a>)</span>. Quisque velit nisi,
+pretium ut lacinia in, elementum id enim. Vestibulum ante ipsum primis
+in faucibus orci luctus et ultrices posuere cubilia Curae; Donec velit
+neque, auctor sit amet aliquam vel, ullamcorper sit amet ligula. Nulla
+quis lorem ut libero malesuada feugiat. Quisque velit nisi, pretium ut
+lacinia in, elementum id enim. Donec sollicitudin molestie malesuada.
+Vivamus suscipit tortor eget felis porttitor volutpat. Curabitur aliquet
+quam id dui posuere blandit. Donec sollicitudin molestie malesuada.
+Curabitur aliquet quam id dui posuere blandit. Curabitur arcu erat,
+accumsan id imperdiet et, porttitor at sem.</p>
+<h1 class="unnumbered" id="chap-1-chap-1-references">References</h1>
+<div id="chap-1-refs" class="references csl-bib-body hanging-indent"
+role="doc-bibliography">
+<div id="chap-1-ref-dummettFregePhilosophyLanguage1981"
+class="csl-entry" role="doc-biblioentry">
+Dummett, Michael. 1981. <em>Frege: Philosophy of Language</em>. 2nd ed.
+<span>London</span>: <span>Duckworth</span>.
 </div>
-<div id="chap-1-ref-fregeUeberSinnUnd1892" class="csl-entry" role="doc-biblioentry">
-Frege, Gottlob. 1892. <span>“Über Sinn und Bedeutung.”</span> <em>Zeitschrift für Philosophie und Philosophische Kritik</em> 100: 25–50.
+<div id="chap-1-ref-fregeUeberSinnUnd1892" class="csl-entry"
+role="doc-biblioentry">
+Frege, Gottlob. 1892. <span>“Über Sinn und Bedeutung.”</span>
+<em>Zeitschrift für Philosophie und Philosophische Kritik</em> 100:
+25–50.
 </div>
 </div>
-
-<h1 id="chap-2-two">Two</h1>
-<p><span class="citation" data-cites="dummettFregePhilosophyLanguage1981 fregeGedanke1918 Frege-BasicLawsArithmetic-2016">(<a href="#chap-2-ref-dummettFregePhilosophyLanguage1981" role="doc-biblioref">Dummett 1981</a>; <a href="#chap-2-ref-fregeGedanke1918" role="doc-biblioref">Frege 1918–1919</a>, <a href="#chap-2-ref-Frege-BasicLawsArithmetic-2016" role="doc-biblioref">2016</a>)</span>. Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor eget felis porttitor volutpat. Vivamus suscipit tortor eget felis porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur non nulla sit amet nisl tempus convallis quis ac lectus.</p>
-<h1 class="unnumbered" id="chap-2-references">References</h1>
-<div id="chap-2-refs" class="references csl-bib-body hanging-indent" role="doc-bibliography">
-<div id="chap-2-ref-dummettFregePhilosophyLanguage1981" class="csl-entry" role="doc-biblioentry">
-Dummett, Michael. 1981. <em>Frege: Philosophy of Language</em>. 2nd ed. <span>London</span>: <span>Duckworth</span>.
+<h1 id="chap-2-chap-2-two">Two</h1>
+<p><span class="citation"
+data-cites="dummettFregePhilosophyLanguage1981 fregeGedanke1918 Frege-BasicLawsArithmetic-2016">(<a
+href="#chap-2-ref-dummettFregePhilosophyLanguage1981"
+role="doc-biblioref">Dummett 1981</a>; <a
+href="#chap-2-ref-fregeGedanke1918" role="doc-biblioref">Frege
+1918–1919</a>, <a href="#chap-2-ref-Frege-BasicLawsArithmetic-2016"
+role="doc-biblioref">2016</a>)</span>. Mauris blandit aliquet elit, eget
+tincidunt nibh pulvinar a. Praesent sapien massa, convallis a
+pellentesque nec, egestas non nisi. Vestibulum ante ipsum primis in
+faucibus orci luctus et ultrices posuere cubilia Curae; Donec velit
+neque, auctor sit amet aliquam vel, ullamcorper sit amet ligula. Lorem
+ipsum dolor sit amet, consectetur adipiscing elit. Vivamus suscipit
+tortor eget felis porttitor volutpat. Mauris blandit aliquet elit, eget
+tincidunt nibh pulvinar a. Vivamus suscipit tortor eget felis porttitor
+volutpat. Vivamus suscipit tortor eget felis porttitor volutpat. Donec
+rutrum congue leo eget malesuada. Curabitur non nulla sit amet nisl
+tempus convallis quis ac lectus.</p>
+<h1 class="unnumbered" id="chap-2-chap-2-references">References</h1>
+<div id="chap-2-refs" class="references csl-bib-body hanging-indent"
+role="doc-bibliography">
+<div id="chap-2-ref-dummettFregePhilosophyLanguage1981"
+class="csl-entry" role="doc-biblioentry">
+Dummett, Michael. 1981. <em>Frege: Philosophy of Language</em>. 2nd ed.
+<span>London</span>: <span>Duckworth</span>.
 </div>
-<div id="chap-2-ref-fregeGedanke1918" class="csl-entry" role="doc-biblioentry">
-Frege, Gottlob. 1918–1919. <span>“Der Gedanke.”</span> <em>Beiträge zur Philosophie des deutschen Idealismus</em> 1: 58–77.
+<div id="chap-2-ref-fregeGedanke1918" class="csl-entry"
+role="doc-biblioentry">
+Frege, Gottlob. 1918–1919. <span>“Der Gedanke.”</span> <em>Beiträge zur
+Philosophie des deutschen Idealismus</em> 1: 58–77.
 </div>
-<div id="chap-2-ref-Frege-BasicLawsArithmetic-2016" class="csl-entry" role="doc-biblioentry">
-———. 2016. <em>Basic <span>Laws</span> of <span>Arithmetic</span></em>. Translated by Philip A. Ebert and Marcus Rossberg. Reprint edition. <span>Oxford</span>: <span>Oxford University Press</span>.
+<div id="chap-2-ref-Frege-BasicLawsArithmetic-2016" class="csl-entry"
+role="doc-biblioentry">
+———. 2016. <em>Basic <span>Laws</span> of <span>Arithmetic</span></em>.
+Translated by Philip A. Ebert and Marcus Rossberg. Reprint edition.
+<span>Oxford</span>: <span>Oxford University Press</span>.
 </div>
 </div>

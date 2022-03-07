@@ -1,0 +1,749 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames*,x11names*}{xcolor}
+% ------------------------------------- Document class
+\documentclass{scrbook}
+\usepackage{scrlayer-scrpage} %         to customize header and footer
+% ------------------------------------- KOMA alterations I
+% Chapter
+% redefining KOMA's chapter macros to include author
+% provides:
+%   - \chapterauthor{}
+%   - \printchapterauthor{}
+%   - \chapterauthorformat{}
+%   - Koma font chapterauthor
+%   - length \chapterauhtorskip
+\makeatletter
+\def\@comingchapterauthor{} % default value to avoid crash if undefined
+\def\@chapterauthor{} % default value to avoid crash if undefined
+\newcommand{\chapterauthor}[1]{\def\@comingchapterauthor{#1}}
+\newcommand{\printchapterauthor}{\@chapterauthor}
+\makeatother
+% - provide customizable values for styling chapter headings
+%       chapterauthor KOMA font
+%       chapterauthorformat formatting command
+%       chapterauthorskip length (space between title and author)
+\newkomafont{chapterauthor}{}
+\newcommand{\chapterauthorformat}[1]{#1}
+\newlength{\chapterauthorskip}
+\setlength{\chapterauthorskip}{\baselineskip} % default
+% redefine KOMA's chapter lines to include author
+\makeatletter
+\renewcommand{\chapterlinesformat}[3]{%
+  \@hangfrom{#2}#3%
+  \vskip \chapterauthorskip%
+  \chapterauthorformat{\usekomafont{chapterauthor}\printchapterauthor}%
+}
+\makeatother
+% Abstract
+% In the scrbook KOMA script class there is no abstract
+% we must provide `if@abstrt' and reproduce the scrartcl
+% definition of the abstract environement
+\makeatletter
+%   - provide abstract=on/off switch for the abstract heading
+\KOMA@ifkey{abstract}{@abstrt}
+%   - default abstract environment
+\newenvironment{abstract}{%
+  \if@titlepage
+    \titlepage
+    \null\vfil
+    \@beginparpenalty\@lowpenalty
+    \if@abstrt
+      \begin{center}
+        \normalfont\sectfont\nobreak\abstractname
+        \@endparpenalty\@M
+      \end{center}
+    \fi
+  \else
+    \if@twocolumn\if@abstrt
+        \addsec*{\abstractname}
+      \fi
+    \else
+      \if@abstrt
+        \small
+        \begin{center}
+          {\normalfont\sectfont\nobreak\abstractname
+            \vspace{-.5em}\vspace{\z@}}%
+        \end{center}
+      \fi
+      \quotation
+    \fi
+  \fi
+}{%
+  \if@titlepage
+    \par\vfil\null\endtitlepage
+  \else
+    \if@twocolumn\else\endquotation\fi
+  \fi
+}
+\makeatother
+% - abstractname: default abstract heading
+\newcommand*\abstractname{Abstract}
+
+% ------------------------------------- VOLUME TYPOGRAPHY
+% - - - - - - - - - - - - - - - - - - - Chapter style
+\setkomafont{chapter}{\huge}
+\setkomafont{chapterauthor}{\Large\usekomafont{disposition} \scshape}
+\renewcommand{\chapterauthorformat}[1]{\begin{center}#1\end{center}}
+%   "Chapter" prefix: remove (false, default) or add (true)
+%\KOMAoptions{chapterprefix=false}
+%   format prefix and number (empty removes the number)
+%   do the same for chaptermark (the header text)
+\renewcommand{\chapterformat}{}
+\renewcommand{\chaptermarkformat}{}
+%   center the title
+\renewcommand*{\raggedchapter}{\centering }
+%   spacing for the chapter command
+\RedeclareSectionCommand[%
+  beforeskip=1\baselineskip,%
+  afterskip=1\baselineskip,%
+  afterindent=false,
+  ]{chapter}
+% you could style the distance between title and author here
+% \setlength{\chapterauthorskip}{.5\baselineskip}
+% - - - - - - - - - - - - - - - - - - - Page headers and footers
+% headers
+\rehead{\normalfont\scshape \printchapterauthor}
+\lohead{\itshape \headmark}
+\ohead{\pagemark}
+%   - pagestyle determines page headings
+%   - plain, headings, or scrheadings for custom headings
+\pagestyle{scrheadings}
+%   - allow specifications of options list in headings
+\KOMAoptions{headings=optiontohead}
+%   - get chapter as mark on both sides
+\automark[chapter]{chapter}
+% footers
+%   note: if \ofoot (or \rofoot, \lofoot) aren't set they will contain page numbers
+\lefoot{} 
+\rofoot{}
+% - - - - - - - - - - - - - - - - - - - Section headings style
+% section counter: remove chapter number
+\renewcommand{\thesection}{\arabic{section}}
+
+% ------------------------------------- OTHER KOMA SETUP
+% - paper
+\KOMAoption{paper}{a4,portrait}
+% - binding correction (press) default: none (web)
+\KOMAoptions{BCOR=0mm}
+% - DIVisions of the page (the higher the less whitespace around the typeblock)
+% -   between 8 and 12/13
+\KOMAoptions{DIV=13,headinclude=yes,footinclude=no}
+% - twoside. yes for full twoside (press), semi for alternating pages but centred (web, printer)
+\KOMAoptions{twoside=semi}
+% - raggedbottom. Do not try to make every page of the same length by stretching inter-paragraph space
+\raggedbottom
+% - open: open chapters on any page (any), right pages (right) or left (left).
+\KOMAoptions{open=right}
+% - titlepage: do chapter titles occupy their own page (yes), or are they
+%     printed with abstract and beginning of text (no)?
+%     note: firstiscover will force chapter titles to occupy their own page too.
+\KOMAoptions{titlepage=no}
+% - abstract: add \abstractname on top of the abstract
+\KOMAoptions{abstract=yes}
+%\renewcommand*\abstractname{Summary}
+% - fontsize
+\KOMAoptions{fontsize=11pt}
+% - footnotes
+%   automatically recognize multiple footnotes (inserts comma)
+\KOMAoptions{footnotes=multiple}
+
+
+% ------------------------------------- KOMA alterations II
+% redefine \chapter to update chapter author after the 
+% previous page ends but before the title is printed
+% WARNING: this has to be placed after any KOMA's RedeclareSectionCommand.
+\makeatletter
+\let\oldchapter\chapter
+\renewcommand{\chapter}[2][]{%
+   \clearpage%
+   \let\@chapterauthor\@comingchapterauthor%
+   \oldchapter[#1]{#2}%
+}
+\makeatother
+
+% ------------------------------------- TYPOGRAPHY FROM PANDOC'S DEFAULT TEMPLATE
+\usepackage{amsmath,amssymb}
+\usepackage{lmodern}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+% in case there is code in a footnote
+
+% Color
+\usepackage{xcolor}
+% Links
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\hypersetup{
+  pdftitle={My collection},
+  pdflang={en},
+  colorlinks=true,
+  linkcolor=Blue,
+  filecolor=Blue,
+  citecolor=Blue,
+  urlcolor=Blue,
+  pdfcreator={LaTeX via pandoc}}
+\urlstyle{same} % disable monospaced font for URLs
+% prevent overfull lines
+\setlength{\emergencystretch}{3em}
+% tight lists
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+% - numbering depth, default: subsubsection
+\setcounter{secnumdepth}{3}
+
+% ------------------------------------- USER'S HEADER-INCLUDES
+
+% ------------------------------------- LANGUAGE
+% Load polyglossia as late as possible: uses bidi with RTL langages (e.g. Hebrew, Arabic)
+% BUG FIX: use the Node renderer (cf https://tex.stackexchange.com/questions/574047/lualatex-amsthm-polyglossia-charissil-error)
+\usepackage[luatexrenderer=Node]{polyglossia}
+  \setmainlanguage[]{}
+% In LuaTeX disable illegal ligatures (English, German)
+\usepackage{selnolig}  
+% Left-to-right languages handled here
+
+% ------------------------------------- BIBLIOGRAPHY
+% provide style for Citeproc bibliographies (Pandoc's default template)
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.5em}
+\newlength{\csllabelwidth}
+\setlength{\csllabelwidth}{3em}
+\newlength{\cslentryspacingunit} % times entry-spacing
+\setlength{\cslentryspacingunit}{\parskip}
+\newenvironment{CSLReferences}[2] % #1 hanging-ident, #2 entry spacing
+ {% don't indent paragraphs
+  \setlength{\parindent}{0pt}
+  % turn on hanging indent if param 1 is 1
+  \ifodd #1
+  \let\oldpar\par
+  \def\par{\hangindent=\cslhangindent\oldpar}
+  \fi
+  % set entry spacing
+  \setlength{\parskip}{#2\cslentryspacingunit}
+ }%
+ {}
+\usepackage{calc}
+\newcommand{\CSLBlock}[1]{#1\hfill\break}
+\newcommand{\CSLLeftMargin}[1]{\parbox[t]{\csllabelwidth}{#1}}
+\newcommand{\CSLRightInline}[1]{\parbox[t]{\linewidth - \csllabelwidth}{#1}\break}
+\newcommand{\CSLIndent}[1]{\hspace{\cslhangindent}#1}
+% csquotes if needed
+
+% ------------------------------------- VOLUME METADATA
+\title{My collection}
+\author{Edited by Jane E. Doe}
+
+% ------------------------------------- KOMA setup title page and TOCs
+% make sure the (inner) title page doesn't have page number
+\renewcommand*{\titlepagestyle}{empty}
+% preparing a table of contents with author names
+%   we need three, because each can only be printed once
+%   kcc, koc, kbc are the front, inside and back table of contents
+\addtotoclist{koc}
+\addtotoclist{kcc}
+\addtotoclist{kbc}
+\DeclareTOCStyleEntry[%
+beforeskip=.2em,
+linefill=\dotfill,
+]{tocline}{chapter}
+
+% ------------------------------------- DOCUMENT BODY
+\begin{document}
+% outer cover page with table of contents
+\extratitle{
+  \begin{center}
+  \vskip 2pc
+  {\fontsize{48}{54}\selectfont My collection}
+  \vskip 2pc
+    {\Large Edited by Jane E. Doe}
+    \end{center}
+  \vskip 4pc
+  {\Large\textbf{Contents}}
+  
+  {
+    \hypersetup{linkcolor=black}
+    \listoftoc*{koc}
+  }
+}
+\frontispiece{
+  \pagestyle{empty}
+  \begin{center}
+  {\Large Frontispiece}
+  \end{center}
+}
+\maketitle 
+
+% - - - - - - - - - - - - - - - - - - - Front matter
+\frontmatter
+
+
+% table of contents
+\addsec*{Contents}
+{\hypersetup{linkcolor=black}
+  \listoftoc*{koc}
+}
+% other lists
+
+% - - - - - - - - - - - - - - - - - - - Main matter
+\mainmatter
+\chapterauthor{}
+\chapter[Introduction]{Introduction}
+
+\addxcontentsline{kcc}{chapter}{, Introduction}
+\addxcontentsline{koc}{chapter}{, Introduction}
+\addxcontentsline{kbc}{chapter}{, Introduction}
+
+%
+%
+This is an example of a multi-author collection using the KOMA script
+book class (a versatile LaTeX class with advanced typography features).
+Custom pandoc templates are used to generate the book and each chapters
+(\texttt{book.latex} and \texttt{chapter.latex}). The book templates
+includes alteration to KOMA's \texttt{scrbook} class to:
+
+\begin{itemize}
+\tightlist
+\item
+  provide an abstract to each chapter,
+\item
+  generate tables of contents whose entries list both author and title
+\item
+  generate PDF bookmarks with both author and title
+\item
+  provide additional commands to print author names in the page
+  headings.
+\end{itemize}
+
+Each chapter has its own bibliography.
+
+Citation links are isolated: even though both chapters cite the same
+bibliography entry, its citations in each chapter link to the
+bibliography of that chapter.
+
+\chapterauthor{I.P. Freely}
+\chapter[Everything is Right]{Everything You Ever Knew is Right}
+
+\addxcontentsline{kcc}{chapter}{I.P. Freely, Everything You Ever Knew is
+Right}
+\addxcontentsline{koc}{chapter}{I.P. Freely, Everything You Ever Knew is
+Right}
+\addxcontentsline{kbc}{chapter}{I.P. Freely, Everything You Ever Knew is
+Right}
+
+\begin{abstract}
+Numerous studies have been conducted by an international team of leading
+scientists and they conclusively establish that everything you ever knew
+is right.
+\end{abstract}
+%
+%
+(\protect\hyperlink{c2-ref-fregeUeberSinnUnd1892}{Frege 1892};
+\protect\hyperlink{c2-ref-dummettFregePhilosophyLanguage1981}{Dummett
+1981}). Quisque velit nisi, pretium ut lacinia in, elementum id enim.
+Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere
+cubilia Curae; Donec velit neque, auctor sit amet aliquam vel,
+ullamcorper sit amet ligula. Nulla quis lorem ut libero malesuada
+feugiat. Quisque velit nisi, pretium ut lacinia in, elementum id enim.
+Donec sollicitudin molestie malesuada. Vivamus suscipit tortor eget
+felis porttitor volutpat. Curabitur aliquet quam id dui posuere blandit.
+Donec sollicitudin molestie malesuada. Curabitur aliquet quam id dui
+posuere blandit. Curabitur arcu erat, accumsan id imperdiet et,
+porttitor at sem.
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+sem.
+
+\hypertarget{c2-c2-one}{%
+\section{One}\label{c2-c2-one}}
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+sem.
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+sem.
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+sem.
+
+\hypertarget{c2-c2-two}{%
+\section{Two}\label{c2-c2-two}}
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+sem.
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+sem.
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+
+Quisque velit nisi, pretium ut lacinia in, elementum id enim. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Nulla quis lorem ut libero malesuada feugiat. Quisque velit
+nisi, pretium ut lacinia in, elementum id enim. Donec sollicitudin
+molestie malesuada. Vivamus suscipit tortor eget felis porttitor
+volutpat. Curabitur aliquet quam id dui posuere blandit. Donec
+sollicitudin molestie malesuada. Curabitur aliquet quam id dui posuere
+blandit. Curabitur arcu erat, accumsan id imperdiet et, porttitor at
+
+\hypertarget{c2-c2-references}{%
+\section*{References}\label{c2-c2-references}}
+\addcontentsline{toc}{section}{References}
+
+\hypertarget{c2-refs}{}
+\begin{CSLReferences}{1}{0}
+\leavevmode\vadjust pre{\hypertarget{c2-ref-dummettFregePhilosophyLanguage1981}{}}%
+Dummett, Michael. 1981. \emph{Frege: Philosophy of Language}. 2nd ed.
+{London}: {Duckworth}.
+
+\leavevmode\vadjust pre{\hypertarget{c2-ref-fregeUeberSinnUnd1892}{}}%
+Frege, Gottlob. 1892. {``Über Sinn und Bedeutung.''} \emph{Zeitschrift
+für Philosophie und Philosophische Kritik} 100: 25--50.
+
+\end{CSLReferences}
+
+\chapterauthor{Al Coholic and Seymour Butt}
+\chapter[Everything is Wrong]{Everything You Ever Knew is Wrong}
+
+\addxcontentsline{kcc}{chapter}{Al Coholic and Seymour Butt, Everything
+You Ever Knew is Wrong}
+\addxcontentsline{koc}{chapter}{Al Coholic and Seymour Butt, Everything
+You Ever Knew is Wrong}
+\addxcontentsline{kbc}{chapter}{Al Coholic and Seymour Butt, Everything
+You Ever Knew is Wrong}
+
+\begin{abstract}
+Numerous studies have been conducted by an international team of leading
+scientists and they conclusively establish that everything you ever knew
+is wrong.
+\end{abstract}
+%
+%
+(\protect\hyperlink{c3-ref-dummettFregePhilosophyLanguage1981}{Dummett
+1981}; \protect\hyperlink{c3-ref-fregeGedanke1918}{Frege 1918--1919}).
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+\hypertarget{c3-c3-one}{%
+\section{One}\label{c3-c3-one}}
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+\hypertarget{c3-c3-two}{%
+\section{Two}\label{c3-c3-two}}
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Praesent
+sapien massa, convallis a pellentesque nec, egestas non nisi. Vestibulum
+ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
+Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit
+amet ligula. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Vivamus suscipit tortor eget felis porttitor volutpat. Mauris blandit
+aliquet elit, eget tincidunt nibh pulvinar a. Vivamus suscipit tortor
+eget felis porttitor volutpat. Vivamus suscipit tortor eget felis
+porttitor volutpat. Donec rutrum congue leo eget malesuada. Curabitur
+non nulla sit amet nisl tempus convallis quis ac lectus.
+
+\hypertarget{c3-c3-references}{%
+\section*{References}\label{c3-c3-references}}
+\addcontentsline{toc}{section}{References}
+
+\hypertarget{c3-refs}{}
+\begin{CSLReferences}{1}{0}
+\leavevmode\vadjust pre{\hypertarget{c3-ref-dummettFregePhilosophyLanguage1981}{}}%
+Dummett, Michael. 1981. \emph{Frege: Philosophy of Language}. 2nd ed.
+{London}: {Duckworth}.
+
+\leavevmode\vadjust pre{\hypertarget{c3-ref-fregeGedanke1918}{}}%
+Frege, Gottlob. 1918--1919. {``Der Gedanke.''} \emph{Beiträge zur
+Philosophie des deutschen Idealismus} 1: 58--77.
+
+\end{CSLReferences}
+
+
+% - - - - - - - - - - - - - - - - - - - Back matter
+
+\backmatter
+\clearpage
+\pagestyle{empty}
+
+
+% back cover table of contents
+\addsec*{Contents}
+{\hypersetup{linkcolor=black}
+  \listoftoc*{kbc}
+}
+
+\end{document}

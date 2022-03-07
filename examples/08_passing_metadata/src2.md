@@ -4,6 +4,6 @@ bibliography:
 - data5.bib
 header-includes: |
   ```{=latex}
-  \emph{yes}
+  \emph{THIS HEADER HAS BEEN IMPORTED FROM SOURCE 2}
   ```
 ---

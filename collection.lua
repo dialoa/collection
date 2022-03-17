@@ -1088,7 +1088,7 @@ function prepare(meta)
         local index = tonumber(utils.stringify(meta['offprint-mode']))
         if index and meta.imports[index] then
             setup.offprint_mode = true
-            meta.imports = pandoc.MetaList(meta.imports[index])
+            meta.imports = pandoc.MetaList({meta.imports[index]})
             if meta.offprints then 
                 meta.collection = meta.offprints
             end

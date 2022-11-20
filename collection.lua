@@ -1077,9 +1077,30 @@ function prepare(meta)
             })
         end
     end
-    -- bear in mind some `imports` items may still lack a `file` key
+    -- NOTE bear in mind some `imports` items may still lack a `file` key
     -- this allows users to deactivate a source without removing its data
     -- by changing `file` to `fileoff` for instance
+
+    -- check that each `file` exists. If not, issue an error message
+    -- and turn off the `file` key
+    for i = 1, #meta.imports do
+        if meta.imports[i].file then
+            filepath = utils.stringify(meta.imports[i].file)
+            if filepath == '' then
+                meta.imports[i].file = nil -- clean up deficient values
+            else 
+                -- try to open
+                f = io.open(filepath, 'r')
+                if f then
+                    f:close()
+                else
+                    message('ERROR', 'File '..filepath..' not found.')
+                    meta.imports[i].fileoff = filepath
+                    meta.imports[i].file = nil
+                end
+            end
+        end
+    end
 
     -- offprint mode? if yes we reduce the imports list to that item
     -- warn if we can't make sense of the `offprint-mode` field 

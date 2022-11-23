@@ -11,6 +11,7 @@
 -- # Global variables
 
 local utils = pandoc.utils
+local stringify = pandoc.utils.stringify
 local system = pandoc.system
 local path = require('pandoc.path')
 
@@ -48,14 +49,14 @@ function message(type, text)
 end
 
 --- type: pandoc-friendly type function
--- utils.type is only defined in Pandoc >= 2.17
+-- pandoc.utils.type is only defined in Pandoc >= 2.17
 -- if it isn't, we extend Lua's type function to give the same values
 -- as pandoc.utils.type on Meta objects: Inlines, Inline, Blocks, Block,
 -- string and booleans
 -- Caution: not to be used on non-Meta Pandoc elements, the 
 -- results will differ (only 'Block', 'Blocks', 'Inline', 'Inlines' in
 -- >=2.17, the .t string in <2.17).
-local type = utils.type or function (obj)
+local type = pandoc.utils.type or function (obj)
         local tag = type(obj) == 'table' and obj.t and obj.t:gsub('^Meta', '')
         return tag and tag ~= 'Map' and tag or type(obj)
     end
@@ -709,7 +710,7 @@ function gather_and_replace(meta)
         end
 
         -- read and parse the file
-        local filepath = utils.stringify(item.file)
+        local filepath = stringify(item.file)
         local file = io.open(filepath, 'r')
         local itemdoc = pandoc.read(file:read('a'))
         file:close()
@@ -808,7 +809,7 @@ function import_sources(doc, tmpdir)
     -- it's a filepath. Either way, return a filepath.
     function save_yaml_if_needed(element, default_filename)
         if type(element) ~= 'table' and type(element) ~= 'Meta' then
-            return utils.stringify(element)
+            return stringify(element)
         else
             local filepath = path.join({tmpdir, default_filename})
             save_meta_as_yaml(element,filepath)
@@ -848,7 +849,7 @@ function import_sources(doc, tmpdir)
 
     -- set a generic import mode
     if doc.meta.collection and doc.meta.collection['mode'] then
-        str = utils.stringify(doc.meta.collection['mode'])
+        str = stringify(doc.meta.collection['mode'])
         if acceptable_modes:find(str) then
             generic_mode = str
         end
@@ -862,7 +863,7 @@ function import_sources(doc, tmpdir)
     local prefix_crossref_ids_filter_fpath = ''
     if setup.needs_isolate_filter then
         if doc.meta.collection['isolate-prefix-pattern'] then
-            isolate_prefix_pattern = utils.stringify(doc.meta.collection['isolate-prefix-pattern'])
+            isolate_prefix_pattern = stringify(doc.meta.collection['isolate-prefix-pattern'])
         end
         prefix_ids_filter_fpath = path.join({tmpdir, 'prefix-ids.lua'})
         prefix_crossref_ids_filter_fpath = path.join({tmpdir, 
@@ -889,7 +890,7 @@ function import_sources(doc, tmpdir)
         end
 
         -- LOCAL import features: source, metadata, defaults, mode, merge
-        local source = utils.stringify(item.file)
+        local source = stringify(item.file)
         local local_meta_fpath = ''
         local local_defaults_fpath = ''
         local mode = generic_mode
@@ -911,7 +912,7 @@ function import_sources(doc, tmpdir)
 
         -- do we have a local mode?
         if item.mode then
-            local str = utils.stringify(item.mode)
+            local str = stringify(item.mode)
             if acceptable_modes:find(str) then
                 mode = str
             end
@@ -1073,7 +1074,7 @@ function prepare(meta)
     for i = 1, #meta.imports do
         if type(meta.imports[i]) ~= 'table' then
             meta.imports[i] = pandoc.MetaMap({ 
-                file = pandoc.MetaString(utils.stringify(meta.imports[i])) 
+                file = pandoc.MetaString(stringify(meta.imports[i])) 
             })
         end
     end
@@ -1085,7 +1086,7 @@ function prepare(meta)
     -- and turn off the `file` key
     for i = 1, #meta.imports do
         if meta.imports[i].file then
-            filepath = utils.stringify(meta.imports[i].file)
+            filepath = stringify(meta.imports[i].file)
             if filepath == '' then
                 meta.imports[i].file = nil -- clean up deficient values
             else 
@@ -1106,7 +1107,7 @@ function prepare(meta)
     -- warn if we can't make sense of the `offprint-mode` field 
     -- if `offprints` is present we replace `collection` with it
     if meta['offprint-mode'] then
-        local index = tonumber(utils.stringify(meta['offprint-mode']))
+        local index = tonumber(stringify(meta['offprint-mode']))
         if index and meta.imports[index] then
             setup.offprint_mode = true
             meta.imports = pandoc.MetaList({meta.imports[index]})
@@ -1130,7 +1131,7 @@ function prepare(meta)
                 end
                 setup[key] = pandoc.List:new()
                 for _,entry in ipairs(meta.collection[key]) do
-                    setup[key]:insert(utils.stringify(entry))
+                    setup[key]:insert(stringify(entry))
                 end
             end
         end
@@ -1219,7 +1220,7 @@ function syntactic_sugar(meta)
     end
 
     if meta.collection and type(meta.collection) ~= 'table' then
-        local filepath = utils.stringify(meta.collection)
+        local filepath = stringify(meta.collection)
         message('INFO', 'Assuming `collection` is a defaults file ' 
             .. 'filepath: ' .. filepath .. '.' )
         meta.collection = pandoc.MetaMap({
@@ -1228,7 +1229,7 @@ function syntactic_sugar(meta)
     end
 
     if meta.offprints and type(meta.offprints) ~= 'table' then
-        local filepath = utils.stringify(meta.offprints)
+        local filepath = stringify(meta.offprints)
         message('INFO', 'Assuming `offprints` is a defaults file ' 
             .. 'filepath: ' .. filepath .. '.' )
         meta.offprints = pandoc.MetaMap({

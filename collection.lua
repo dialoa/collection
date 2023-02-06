@@ -1004,7 +1004,7 @@ function import_sources(doc, tmpdir)
         end
 
         --  function to inform users of the command we're running
-        local function inform (src, args)
+        local function inform(src, args)
             local argstring = ''
             for i = 2, #args do
                 argstring = argstring .. ' ' .. args[i]
@@ -1017,6 +1017,7 @@ function import_sources(doc, tmpdir)
     
             -- @TODO need to modify to have FORMAT right and yet 
             -- catch the result in native format
+            -- @TODO piping may fail in windows WSL
             arguments:extend({'-t', 'json'})
             inform(source, arguments)
             local result = pandoc.read(pandoc.pipe('pandoc', arguments, ''), 'json')
@@ -1026,7 +1027,17 @@ function import_sources(doc, tmpdir)
 
             arguments:extend({'-t', FORMAT})
             inform(source, arguments)
-            local result = pandoc.pipe('pandoc', arguments, '')
+
+            -- piping on Win (WSL) adds newlines. We save to a temp file instead
+
+            -- local result = pandoc.pipe('pandoc', arguments, '')
+            -- doc.blocks:insert(pandoc.RawBlock(FORMAT, result))
+
+            arguments:extend({'-o', 'out.'..FORMAT})
+            pandoc.pipe('pandoc', arguments, '')
+            local file = io.open('out.'..FORMAT, 'r')
+            local result = file:read('a')
+            file:close()
             doc.blocks:insert(pandoc.RawBlock(FORMAT, result))
 
         elseif mode == 'direct' then

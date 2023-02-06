@@ -1114,10 +1114,10 @@ function prepare(meta)
             if meta.offprints then 
                 meta.collection = meta.offprints
             end
-            message('INFO', 'Offprint mode, source number ' .. index)
+            message('INFO', 'Offprint mode, source number ' .. tostring(index))
         else
             meta['offprint-mode'] = nil
-            message('WARNING', 'The offprint required (' .. index 
+            message('WARNING', 'The offprint required (' .. tostring(index) 
                 .. ") doesn't exist, ignoring offprint mode.")
         end
     end

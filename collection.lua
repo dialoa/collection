@@ -982,8 +982,8 @@ function import_sources(doc, tmpdir)
             end
         end
 
-        -- if isolate, add a prefix and apply the pandoc-crossref
-        -- filter upfront 
+        -- if isolate, add a prefix, apply prefix_crossref_ids_filter
+        -- before any other
         if isolate then
             arguments:extend({
                 '-M', 'prefix-ids-prefix=' .. 
@@ -1039,11 +1039,21 @@ function import_sources(doc, tmpdir)
     
             -- @TODO need to modify to have FORMAT right and yet 
             -- catch the result in native format
-            -- @TODO piping may fail in windows WSL
+            -- (external pandoc will see FORMAT='native')
             arguments:extend({'-t', 'json'})
             inform(source, arguments)
-            local result = pandoc.read(pandoc.pipe('pandoc', arguments, ''), 'json')
-            doc.blocks:extend(result.blocks)
+
+            -- piping on Win (WSL) adds newlines. We save to a temp file instead
+
+            -- local result = pandoc.read(pandoc.pipe('pandoc', arguments, ''), 'json')
+            -- doc.blocks:extend(result.blocks)
+
+            arguments:extend({'-o', 'tmp.out.collection.json'})
+            pandoc.pipe('pandoc', arguments, '')
+            local file = io.open('tmp.out.collection.json', 'r')
+            local result = file:read('a')
+            file:close()
+            doc.blocks:extend( pandoc.read(result, 'json').blocks )
 
         elseif mode == 'raw' then
 

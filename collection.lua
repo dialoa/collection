@@ -147,21 +147,43 @@ function to_json(doc)
 
 end
 
+--- meta_to_yaml: converts MetaMap to yaml
+---@return result string | nil
+function meta_to_yaml (map)
+    if not map then return nil end
+    local doc = pandoc.Pandoc({}, pandoc.Meta(map))
+
+    local function extract_yaml (str)
+        if str then
+            return str:match("^%-%-%-\n(.*\n)%-%-%-\n") or ''
+        end
+    end
+
+    -- in Pandoc >= 2.17, we can simply use pandoc.write
+    if PANDOC_VERSION >= '2.17' then
+
+        return extract_yaml( pandoc.write(doc, 'markdown') )
+
+    else
+
+        local json = to_json(doc)
+        if json then 
+
+            return extract_yaml( 
+                pandoc.pipe('pandoc', {'-f', 'json', '-s', '-t', 'markdown'}, json)
+            )
+        end
+
+    end
+
+end
+
 --- save_meta_as_yaml: save Meta or Metamap as a yaml file
 -- uses pandoc to convert Meta or Metamap to yaml.
 -- a converter would be faster, but would need to parse Meta elements.
 function save_meta_as_yaml(map,filepath)
-    -- build an Pandoc document with map as meta
-    local doc = pandoc.Pandoc({}, pandoc.Meta(map))
-    -- convert the doc to json, so we can send it to pandoc.pipe
-    local yaml = ''
-    local json = to_json(doc)
-    -- pipe it to pandoc to convert to markdown
-    if json then 
-        yaml = pandoc.pipe('pandoc', {'-f', 'json', '-s', '-t', 'markdown'}, json)
-        -- catch the block between first two `---` lines
-        yaml = string.match(yaml, "^%-%-%-\n(.*\n)%-%-%-\n") or ''
-    end
+
+    yaml = meta_to_yaml(map) or ''
 
     -- save file, even if empty
     local file = io.open(filepath, 'w')

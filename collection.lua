@@ -61,6 +61,14 @@ local type = pandoc.utils.type or function (obj)
         return tag and tag ~= 'Map' and tag or type(obj)
     end
 
+--- lazily compiled default templates for pandoc.write
+compiled_templates = {}
+function get_template(format)
+    compiled_templates[format] = compiled_templates[format]
+        or pandoc.template.compile(pandoc.template.default(format))
+    return compiled_templates[format]
+end
+
 --- to_json: converts a entire Pandoc document to json
 -- @param doc pandoc Pandoc object to be converted to json
 -- @return string json string representation if success, nil if failed
@@ -162,7 +170,11 @@ function meta_to_yaml (map)
     -- in Pandoc >= 2.17, we can simply use pandoc.write
     if PANDOC_VERSION >= '2.17' then
 
-        return extract_yaml( pandoc.write(doc, 'markdown') )
+        return extract_yaml( 
+                pandoc.write(doc, 'markdown', 
+                    { template = get_template('markdown')}
+                )
+            )
 
     else
 
@@ -826,9 +838,9 @@ function import_sources(doc, tmpdir)
     -- CONSTANTS
     local acceptable_modes = pandoc.List:new({'native', 'raw', 'direct'})
 
-    -- save_yaml_if_needed: if element is a map, save it as 
-    -- a temp yaml file `default_filename', otherwise assume 
-    -- it's a filepath. Either way, return a filepath.
+    -- save_yaml_if_needed: if element isn't a map, assume it's
+    -- a filepath to metadata file; otherwise save a temp
+    -- yaml file `default_filename`. Either way, returns a filepath.
     function save_yaml_if_needed(element, default_filename)
         if type(element) ~= 'table' and type(element) ~= 'Meta' then
             return stringify(element)
@@ -926,6 +938,14 @@ function import_sources(doc, tmpdir)
                 item['child-metadata'], 'local_meta.yaml' )
         end
 
+        -- DEBUG: display local yaml file
+        -- if local_meta_fpath ~= '' then 
+        --     print('IMPORT #', i, local_meta_fpath)
+        --     local file = io.open(local_meta_fpath, 'r')
+        --     print(file:read('a'))
+        --     file:close()
+        -- end
+
         -- do we need local defaults?
         if item['defaults'] then
             local_defaults_fpath = save_yaml_if_needed(
@@ -982,8 +1002,8 @@ function import_sources(doc, tmpdir)
             end
         end
 
-        -- if isolate, add a prefix, apply prefix_crossref_ids_filter
-        -- before any other
+        -- if isolate, add a prefix and apply the pandoc-crossref
+        -- filter upfront 
         if isolate then
             arguments:extend({
                 '-M', 'prefix-ids-prefix=' .. 
@@ -1039,21 +1059,11 @@ function import_sources(doc, tmpdir)
     
             -- @TODO need to modify to have FORMAT right and yet 
             -- catch the result in native format
-            -- (external pandoc will see FORMAT='native')
+            -- @TODO piping may fail in windows WSL
             arguments:extend({'-t', 'json'})
             inform(source, arguments)
-
-            -- piping on Win (WSL) adds newlines. We save to a temp file instead
-
-            -- local result = pandoc.read(pandoc.pipe('pandoc', arguments, ''), 'json')
-            -- doc.blocks:extend(result.blocks)
-
-            arguments:extend({'-o', 'tmp.out.collection.json'})
-            pandoc.pipe('pandoc', arguments, '')
-            local file = io.open('tmp.out.collection.json', 'r')
-            local result = file:read('a')
-            file:close()
-            doc.blocks:extend( pandoc.read(result, 'json').blocks )
+            local result = pandoc.read(pandoc.pipe('pandoc', arguments, ''), 'json')
+            doc.blocks:extend(result.blocks)
 
         elseif mode == 'raw' then
 

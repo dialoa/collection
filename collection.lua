@@ -34,15 +34,16 @@ local setup = {
     offprint_mode = false, -- whether we're in offprint mode
 }
 
+VERBOSITY_LEVELS = {INFO = 0, WARNING = 1, ERROR = 2}
+
 -- # Helper functions
 
 --- message: send message to std_error
 -- @param type string INFO, WARNING, ERROR
 -- @param text string message text
 function message(type, text)
-    local level = {INFO = 0, WARNING = 1, ERROR = 2}
-    if level[type] == nil then type = 'ERROR' end
-    if level[PANDOC_STATE.verbosity] <= level[type] then
+    type = VERBOSITY_LEVELS[type] and type or 'ERROR'
+    if VERBOSITY_LEVELS[PANDOC_STATE.verbosity] <= VERBOSITY_LEVELS[type] then
         io.stderr:write('[' .. type .. '] Collection lua filter: ' 
             .. text .. '\n')
     end
@@ -875,9 +876,9 @@ function import_sources(doc, tmpdir)
             doc.meta.collection.defaults, 'generic_defaults.yaml')
     end
 
-    -- DEBUG: display a temp yaml file
-    -- local file = io.open(generic_defaults_fpath, 'r')
-    -- print('yaml file: ')
+    -- DEBUG: display a temp yaml files
+    -- local file = io.open(generic_meta_fpath, 'r')
+    -- print('yaml file ', generic_meta_fpath, ':')
     -- print(file:read('a'))
     -- file:close()
 
@@ -1075,9 +1076,11 @@ function import_sources(doc, tmpdir)
             -- local result = pandoc.pipe('pandoc', arguments, '')
             -- doc.blocks:insert(pandoc.RawBlock(FORMAT, result))
 
-            arguments:extend({'-o', 'out.'..FORMAT})
+            local tmp_outfile = path.join {tmpdir, 'out.'..FORMAT}
+
+            arguments:extend({'-o', tmp_outfile })
             pandoc.pipe('pandoc', arguments, '')
-            local file = io.open('out.'..FORMAT, 'r')
+            local file = io.open(tmp_outfile, 'r')
             local result = file:read('a')
             file:close()
             doc.blocks:insert(pandoc.RawBlock(FORMAT, result))

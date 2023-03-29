@@ -1178,6 +1178,9 @@ function prepare(meta)
         end
     end
 
+    --- if not offprint mode, mark the first import as `collection-first-import`
+    --- see below
+
     -- build lists of metadata keys to gather, globalize and pass
     if meta.collection then
         for _,key in ipairs({'gather','replace', 'globalize', 'pass'}) do
@@ -1201,6 +1204,16 @@ function prepare(meta)
     -- globalize and pass the required metadata keys
     if setup.globalize or setup.pass then
         meta = globalize_and_pass(meta)
+    end
+
+    -- in non-offprint mode, mark the first import as 'collection-first-import' 
+    -- unless this is already set to false
+    if not meta['offprint-mode'] and meta.imports[1] then
+        meta.imports[1]['child-metadata'] = meta.imports[1]['child-metadata']
+            or pandoc.MetaMap {}
+        if meta.imports[1]['child-metadata']['collection-first-import'] ~= false then
+            meta.imports[1]['child-metadata']['collection-first-import'] = true
+        end
     end
 
     -- ISOLATE

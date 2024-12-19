@@ -245,9 +245,8 @@
 \newcommand{\CSLIndent}[1]{\hspace{\cslhangindent}#1}
 % csquotes if needed
 
-% ------------------------------------- VOLUME METADATA
-\title{My collection}
-\author{Edited by Jane E. Doe}
+% ------------------------------------- OFFPRINT METADATA
+\title{Introduction}
 
 % ------------------------------------- KOMA setup title page and TOCs
 % make sure the (inner) title page doesn't have page number
@@ -265,40 +264,19 @@ linefill=\dotfill,
 
 % ------------------------------------- DOCUMENT BODY
 \begin{document}
-% outer cover page with table of contents
-\extratitle{
+% outer cover page 
+\pagestyle{empty}
+\setcounter{page}{0}
+{
+  {\Large My collection}
+  \vskip \baselineskip
+  {\large Edited by Jane E. Doe}
   \begin{center}
-  \vskip 2pc
-  {\fontsize{48}{54}\selectfont My collection}
-  \vskip 2pc
-    {\Large Edited by Jane E. Doe}
-    \end{center}
   \vskip 4pc
-  {\Large\textbf{Contents}}
-  
-  {
-    \hypersetup{linkcolor=black}
-    \listoftoc*{koc}
-  }
+  {\Huge Introduction}
+  \vskip 2pc
+    \end{center}
 }
-\frontispiece{
-  \pagestyle{empty}
-  \begin{center}
-  {\Large Frontispiece}
-  \end{center}
-}
-\maketitle 
-
-% - - - - - - - - - - - - - - - - - - - Front matter
-\frontmatter
-
-
-% table of contents
-\addsec*{Contents}
-{\hypersetup{linkcolor=black}
-  \listoftoc*{koc}
-}
-% other lists
 
 % - - - - - - - - - - - - - - - - - - - Main matter
 \mainmatter

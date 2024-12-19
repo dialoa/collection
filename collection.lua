@@ -1,212 +1,22 @@
---[[-- # Collection builder - Building collections with Pandoc
 
-@author Julien Dutant <julien.dutant@kcl.ac.uk>
-@copyright 2021 Julien Dutant
-@license MIT - see LICENSE file for details.
-@release 0.5
-]]
+---------------------------------------------------------
+----------------Auto generated code block----------------
+---------------------------------------------------------
 
--- # Filter settings
+do
+    local searchers = package.searchers or package.loaders
+    local origin_seacher = searchers[2]
+    searchers[2] = function(path)
+        local files =
+        {
+------------------------
+-- Modules part begin --
+------------------------
 
--- # Global variables
-
-local utils = pandoc.utils
-local stringify = pandoc.utils.stringify
-local system = pandoc.system
-local path = require('pandoc.path')
-
---  environement variables
-local env = {
-    working_directory = system.get_working_directory(),
-}
-env.input_folder = path.directory(PANDOC_STATE['input_files'][1])
-
--- setup map
--- further fields that may be added:
---  - gather: strings list, metadata keys to gather from children
---  - replace: strings list, metadata keys to be replaced by children's ones
---  - pass: strings list, metadata keys to be passed onto children
---  - globalize: strings list, metadata keys to be made global onto children
-local setup = {
-    do_something = false, -- whether the filter needs to do anything
-    isolate = false, -- whether to isolate sources by default
-    needs_isolate_filter = false, -- whether the prefix-ids filters are needed
-    offprint_mode = false, -- whether we're in offprint mode
-}
-
-VERBOSITY_LEVELS = {INFO = 0, WARNING = 1, ERROR = 2}
-
--- # Helper functions
-
---- message: send message to std_error
--- @param type string INFO, WARNING, ERROR
--- @param text string message text
-function message(type, text)
-    type = VERBOSITY_LEVELS[type] and type or 'ERROR'
-    if VERBOSITY_LEVELS[PANDOC_STATE.verbosity] <= VERBOSITY_LEVELS[type] then
-        io.stderr:write('[' .. type .. '] Collection lua filter: ' 
-            .. text .. '\n')
-    end
-end
-
---- type: pandoc-friendly type function
--- pandoc.utils.type is only defined in Pandoc >= 2.17
--- if it isn't, we extend Lua's type function to give the same values
--- as pandoc.utils.type on Meta objects: Inlines, Inline, Blocks, Block,
--- string and booleans
--- Caution: not to be used on non-Meta Pandoc elements, the 
--- results will differ (only 'Block', 'Blocks', 'Inline', 'Inlines' in
--- >=2.17, the .t string in <2.17).
-local type = pandoc.utils.type or function (obj)
-        local tag = type(obj) == 'table' and obj.t and obj.t:gsub('^Meta', '')
-        return tag and tag ~= 'Map' and tag or type(obj)
-    end
-
---- lazily compiled default templates for pandoc.write
-compiled_templates = {}
-function get_template(format)
-    compiled_templates[format] = compiled_templates[format]
-        or pandoc.template.compile(pandoc.template.default(format))
-    return compiled_templates[format]
-end
-
---- to_json: converts a entire Pandoc document to json
--- @param doc pandoc Pandoc object to be converted to json
--- @return string json string representation if success, nil if failed
--- @TODO in Win, use Python or Perl if present, powershell is slow
-function to_json(doc)
-
-    -- in Pandoc >= 2.17, we can simply use pandoc.write
-    if PANDOC_VERSION >= '2.17' then
-        if pandoc.utils.type(doc) == 'Pandoc' then
-            return pandoc.write(doc, 'json')
-        else
-            return nil
-        end
-    end
-
-    -- in Pandoc <= 2.17, first confirm that doc is Pandoc object
-    if not (doc.meta and doc.blocks) then
-        return nil
-    end
-
-    -- pandoc.utils.run_json_filter(doc, command) converts the Pandoc
-    -- doc to its JSON representation, sends it to stdin, executes
-    -- `command` expects a JSON representation of a Pandoc document 
-    -- return. Our `command` simply wraps the json string Pandoc 
-    -- stands to stdin in (a JSON representation) of a Pandoc document
-    -- with a Rawblock containing that string. 
-    -- we use `sed` on MacOs/Linux systems and Powershell on Win.
-    local command = ''
-    local arguments = pandoc.List:new()
-    -- strings to build an json representation of an empty document 
-    -- with a RawBlock element
-    local api_ver_str = tostring(PANDOC_API_VERSION):gsub('%.',',')
-    local before = '{"pandoc-api-version":[' .. api_ver_str .. '],'
-        .. [["meta":{},"blocks":[{"t":"RawBlock","c":["json","]]
-    local after =   [["]}]}]]
-    local result = nil
-    if pandoc.system.os == 'mingw32' then
-        -- we need to set input and output in utf8
-        -- before run_json_filter is called
-        -- [Console]::OutputEncoding for stdin
-        -- $OutputEncoding for stdout
-        -- see https://stackoverflow.com/questions/49476326/displaying-unicode-in-powershell
-        -- @TODO find a way to restore later! we can't use variables
-        -- as they are dumped at the end of this call
-        os.execute([[PowerShell -NoProfile -Command ]]
-            .. ' [Console]::OutputEncoding=[Text.Encoding]::utf8;'
-            .. ' $OutputEncoding=[Text.Encoding]::utf8;'
-            )
-        command = 'powershell'
-        arguments:extend({'-NoProfile', '-Command'})
-        -- write the powershell script
-        -- (for some reason it isn't necessary to wrap it in double quotes)
-        local pwsh_script = ''
-        -- manipulate stdin
-        pwsh_script = pwsh_script .. '$input'
-        -- escape backslashes and double quotes
-        pwsh_script = pwsh_script .. [[ -replace '\\','\\']]
-            .. [[ -replace '\"','\"']]
-        -- wrap the result in an empty document with a RawBlock element
-        pwsh_script = pwsh_script .. " -replace '^','" .. before .. "'"
-                .. " -replace '$','" .. after .. "'"
-        arguments:insert(pwsh_script)
-
-        result = pandoc.utils.run_json_filter(doc, command, arguments)
-        -- restore console settings here
-
-    else
-        command = 'sed'
-        local sed_script = ''
-        -- escape backlashes and double quotes
-        sed_script = sed_script .. [[s/\\/\\\\/g; ]] .. [[s/\"/\\"/g; ]]
-        -- wrap the result in an empty document with a RawBlock element
-        sed_script = sed_script .. [[s/^/]] .. before .. [[/; ]] 
-            .. [[s/$/]] .. after .. [[/; ]]
-        arguments:insert(sed_script)
-
-        result = pandoc.utils.run_json_filter(doc, command, arguments)
-
-    end
-
-    -- catch the result in the `text` field of the first block
-    -- return nil if failed
-    return result.blocks[1].text or nil
-
-end
-
---- meta_to_yaml: converts MetaMap to yaml
----@return result string | nil
-function meta_to_yaml (map)
-    if not map then return nil end
-    local doc = pandoc.Pandoc({}, pandoc.Meta(map))
-
-    local function extract_yaml (str)
-        if str then
-            return str:match("^%-%-%-\n(.*\n)%-%-%-\n") or ''
-        end
-    end
-
-    -- in Pandoc >= 2.17, we can simply use pandoc.write
-    if PANDOC_VERSION >= '2.17' then
-
-        return extract_yaml( 
-                pandoc.write(doc, 'markdown', 
-                    { template = get_template('markdown')}
-                )
-            )
-
-    else
-
-        local json = to_json(doc)
-        if json then 
-
-            return extract_yaml( 
-                pandoc.pipe('pandoc', {'-f', 'json', '-s', '-t', 'markdown'}, json)
-            )
-        end
-
-    end
-
-end
-
---- save_meta_as_yaml: save Meta or Metamap as a yaml file
--- uses pandoc to convert Meta or Metamap to yaml.
--- a converter would be faster, but would need to parse Meta elements.
-function save_meta_as_yaml(map,filepath)
-
-    yaml = meta_to_yaml(map) or ''
-
-    -- save file, even if empty
-    local file = io.open(filepath, 'w')
-    file:write(yaml)
-    file:close()
-
-end
-
--- # Internal filters
-
+["prefix_ids_filter"] = function()
+--------------------
+-- Module: 'prefix_ids_filter'
+--------------------
 --- prefix_crossref_ids_filter, prefix_ids_filter: filters to prefix
 -- sources's ids and links to avoid conflicts between sources.  
 -- These two filters will be ran on imported sources if we need to isolate
@@ -214,273 +24,7 @@ end
 -- The first filter, applied before the user's, handles Pandoc-crossref 
 -- crossreferences. The second, applied after, handles remaining 
 -- crossreferences. 
-prefix_crossref_ids_filter = [[
--- # Global variables
-
----@type string user's custom prefix
-local prefix = ''
----@type pandoc.List identifers removed
-local old_identifiers = pandoc.List:new()
----@type pandoc.List identifers added
-local new_identifiers = pandoc.List:new()
----@type pandoc.List identifiers to ignore
-local ids_to_ignore = pandoc.List:new()
----@type boolean whether to process pandoc-crossref links
-local pandoc_crossref = true
-
-local crossref_prefixes = pandoc.List:new({'fig','sec','eq','tbl','lst',
-        'Fig','Sec','Eq','Tbl','Lst'})
-local crossref_str_prefixes = pandoc.List:new({'eq','tbl','lst',
-        'Eq','Tbl','Lst'}) -- found in Str elements (captions or after eq)
-local codeblock_captions = true -- is the codeblock caption syntax on?
-
---- type: pandoc-friendly type function
--- pandoc.utils.type is only defined in Pandoc >= 2.17
--- if it isn't, we extend Lua's type function to give the same values
--- as pandoc.utils.type on Meta objects: Inlines, Inline, Blocks, Block,
--- string and booleans
--- Caution: not to be used on non-Meta Pandoc elements, the 
--- results will differ (only 'Block', 'Blocks', 'Inline', 'Inlines' in
--- >=2.17, the .t string in <2.17).
-local type = pandoc.utils.type or function (obj)
-        local tag = type(obj) == 'table' and obj.t and obj.t:gsub('^Meta', '')
-        return tag and tag ~= 'Map' and tag or type(obj)
-    end
-
---- get_options: get filter options for document's metadata
--- @param meta pandoc Meta element
-function get_options(meta)
-
-    -- syntactic sugar: options aliases
-    -- merging behaviour: aliases prevail
-    local aliases = {'prefix', 'pandoc-crossref'}
-    for _,alias in ipairs(aliases) do
-        if meta['prefix-ids-' .. alias] ~= nil then
-            -- create a 'prefix-ids' key if needed
-            if not meta['prefix-ids'] then
-                meta['prefix-ids'] = pandoc.MetaMap({})
-            end
-            meta['prefix-ids'][alias] = meta['prefix-ids-' .. alias]
-            meta['prefix-ids-' .. alias] = nil
-        end
-    end
-
-    -- save options in global variables
-    if meta['prefix-ids'] then
-
-        if meta['prefix-ids']['prefix'] then
-            prefix = pandoc.utils.stringify(meta['prefix-ids']['prefix'])
-        end
-        if meta['prefix-ids']['pandoc-crossref'] ~= nil 
-            and meta['prefix-ids']['pandoc-crossref'] == false then
-            pandoc_crossref = false
-        end
-        
-    end
-
-    -- if meta.codeBlockCaptions is false then we should *not*
-    -- process `lst:label` identifiers that appear in Str elements
-    -- (that is, in codeblock captions). We will still convert
-    -- those that appear as CodeBlock attributes
-    if not meta.codeBlockCaptions then
-        codeblock_captions = false
-        crossref_str_prefixes = crossref_str_prefixes:filter(
-            function(item) return item ~= 'lst' end)
-    end
-
-    return meta
-end
-
---- process_doc: process the pandoc document
--- generates a prefix if needed, walk through the document
--- and adds a prefix to all elements with identifier.
--- @param pandoc Pandoc element
--- @TODO handle meta fields that may contain identifiers? abstract
--- and thanks?
-function process_doc(doc)
-
-    -- generate prefix if needed
-    if prefix == '' then
-        prefix = pandoc.utils.sha1(pandoc.utils.stringify(doc.blocks))
-    end
-
-    -- add_prefix function
-    -- check that it's a pandoc-crossref type
-    -- do not add prefixes to empty identifiers
-    -- store the old identifiers to later fix links
-    add_prefix = function (el)
-        if el.identifier and el.identifier ~= '' then
-            -- if pandoc-crossref type, we add the prefix after "fig:", "tbl", ...
-            -- though (like pandoc-crossref) we must ignore #lst:label unless there's 
-            -- a caption attribute or the codeblock caption syntax is on
-            if pandoc_crossref then
-                local type, identifier = el.identifier:match('^(%a+):(.*)')
-                if type and identifier and crossref_prefixes:find(type) then
-                    -- special case in which we don't touch it:
-                    -- a codeblock with #lst:label id but no caption
-                    -- nor caption table syntax on
-                    if el.t == 'CodeBlock' and not codeblock_captions 
-                        and type == 'lst' and (not el.attributes
-                            or not el.attributes.caption) then
-                        return
-                    -- in all other cases we add prefix between `type`
-                    -- and `identifier`
-                    -- NOTE: in principle we should check that if it's
-                    -- a codeblock it has a caption paragraph before or
-                    -- after, but that requires going through the doc
-                    -- el by el, not worth it. 
-                    else
-                        old_identifiers:insert(type .. ':' .. identifier)
-                        new_id =  type .. ':' .. prefix .. identifier
-                        el.identifier = new_id
-                        new_identifiers:insert(new_id)
-                        return el
-                    end
-                end
-            end
-            -- if no pandoc_crossref action was taken, apply simple prefix
-            -- Warning: if `autoSectionLabels` is true, pandoc-crossref
-            -- will add `sec:` to Header element ids; so we anticipate that
-            old_identifiers:insert(el.identifier)
-            new_id = prefix .. el.identifier
-            el.identifier = new_id
-            if el.t == 'Header' 
-                and doc.meta.autoSectionLabels ~= false then
-                new_identifiers:insert('sec:' .. new_id)
-            else
-                new_identifiers:insert(new_id)
-            end
-            return el
-        end
-    end
-    -- add_prefix_string function
-    -- handles {#eq:label} for equations and {#tbl:label} or {#lst:label}
-    -- in table or listing captions. 
-    add_prefix_string = function(el)
-        local type, identifier = el.text:match('^{#(%a+):(.*)}')
-        if type and identifier and crossref_str_prefixes:find(type) then
-            old_identifiers:insert(type .. ':' .. identifier)
-            local new_id = type .. ':' .. prefix .. identifier
-            new_identifiers:insert(new_id)
-            return pandoc.Str('{#' .. new_id .. '}')
-        end
-    end
-    -- process_identifiers function
-    -- apply the add_prefix and add_prefix_strings functions to
-    -- elements with pandoc-crossref identifiers
-    process_identifiers = function(blocks)
-        local div = pandoc.walk_block(pandoc.Div(blocks), {
-            Image = add_prefix,
-            Header = add_prefix,
-            Table = add_prefix,
-            CodeBlock = add_prefix,
-            Str = add_prefix_string,
-        })
-        return div.content
-    end
-
-    -- prefix identifiers in doc and in metadata fields with blocks content
-    for key,val in pairs(doc.meta) do
-        if type(val) == 'Blocks' then
-            doc.meta[key] = pandoc.MetaBlocks(
-                        process_identifiers(pandoc.List(val))
-                    )
-        elseif type(val) == 'List' then
-            for i = 1, #val do
-                if type(val[i]) == 'Blocks' then
-                    doc.meta[key][i] = pandoc.MetaBlocks(
-                        process_identifiers(pandoc.List(val[i]))
-                    )
-                end
-            end
-        end
-    end
-    doc.blocks = process_identifiers(doc.blocks)
-
-    -- function to add prefixes to links
-    local add_prefix_to_link = function (link)
-        if link.target:sub(1,1) == '#' 
-            and old_identifiers:find(link.target:sub(2,-1)) then
-            local target = link.target:sub(2,-1)
-            local type = target:match('^(%a+):')
-            if crossref_prefixes:find(type) then
-                link.target = '#' .. type .. ':' .. prefix 
-                    .. target:match('^%a+:(.*)')
-                return link
-            end
-        end
-    end
-    -- function to add prefixes to pandoc-crossref citations
-    -- looking for keys starting with `fig:`, `sec:`, `eq:`, ... 
-    local add_prefix_to_crossref_cites = function (cite)
-        for i = 1, #cite.citations do
-            local type, identifier = cite.citations[i].id:match('^(%a+):(.*)')
-            if type and identifier and crossref_prefixes:find(type) then
-                -- put the type in lowercase to match Fig: and fig:
-                -- note that sec: cites might refer to an old identifier
-                -- that doesn't start with sec:
-                local stype = pandoc.text.lower(type)
-                if old_identifiers:find(stype..':'..identifier) or
-                    (stype == 'sec' and old_identifiers:find(identifier))
-                    then
-                    cite.citations[i].id = type..':'..prefix..identifier
-                end
-            end
-        end
-        return cite
-    end
-    -- function to process links and cites in some blocks
-    process_links = function(blocks) 
-        local div = pandoc.walk_block(pandoc.Div(blocks), {
-            Link = add_prefix_to_link,
-            Cite = pandoc_crossref and add_prefix_to_crossref_cites
-        })
-        return div.content
-    end
-
-    -- process links and cites in doc and in metablocks fields
-    for key,val in pairs(doc.meta) do
-        if type(val) == 'Blocks' then
-            doc.meta[key] = pandoc.MetaBlocks(
-                        process_links(pandoc.List(val))
-                    )
-        elseif type(val) == 'List' then
-            for i = 1, #val do
-                if type(val[i]) == 'Blocks' then
-                    doc.meta[key][i] = pandoc.MetaBlocks(
-                        process_links(pandoc.List(val[i]))
-                    )
-                end
-            end
-        end
-    end
-    doc.blocks = process_links(doc.blocks)
-
-    -- set metadata (in case prefix-ids is ran later on)
-    -- save a list of ids changed
-    if not doc.meta['prefix-ids'] then
-        doc.meta['prefix-ids'] = pandoc.MetaMap({})
-    end
-    doc.meta['prefix-ids'].ignoreids = pandoc.MetaList(new_identifiers)
-
-    -- return the result
-    return doc
-
-end
-
--- # Main filter
-return {
-    {
-        Meta = get_options,
-        Pandoc = function(doc) 
-            if pandoc_crossref then return process_doc(doc) end
-        end,
-    }
-}
-
-]]
-
-prefix_ids_filter = [[
+return [[
 ---# Global variables
 
 ---@alias crossref.Prefixes 'fig'|'sec'|'eq'|'tbl'|'lst'
@@ -759,6 +303,558 @@ return {
     }
 }
 ]]
+end,
+
+["file"] = function()
+--------------------
+-- Module: 'file'
+--------------------
+local system = pandoc.system
+local path = pandoc.path
+
+-- ## File module
+local file = {}
+
+---Whether a file exists
+---@param filepath string
+---@return boolean
+function file.exists(filepath)
+    local f = io.open(filepath, 'r')
+    if f ~= nil then
+      io.close(f)
+      return true
+    else 
+      return false
+    end  
+end
+
+
+---read file as string (default) or binary.
+---@param filepath string file path
+---@param mode? 'b'|'t' 'b' for binary or 't' for text (default text)
+---@return boolean success
+---@return string? contents file contents if success
+function file.read(filepath, mode)
+    local mode = mode == 'b' and 'rb' or 'r'
+    local contents
+    local f = io.open(filepath, mode)
+    if f then 
+        contents = f:read('a')
+        f:close()
+        return true, contents
+    else
+        return false
+    end
+end
+
+---Write string to file in text or binary mode.
+---@param contents string file contents
+---@param filepath string file path
+---@param mode? 'b'|'t' 'b' for binary or 't' for text (default text)
+---@return boolean success
+function file.write(contents, filepath, mode)
+    local mode = mode == 'b' and 'wb' or 'w'
+    local f = io.open(filepath, mode)
+      if f then 
+        f:write(contents)
+        f:close()
+        return true
+    else
+      return false
+    end
+end
+
+return file
+end,
+
+["prefix_crossref_ids_filter"] = function()
+--------------------
+-- Module: 'prefix_crossref_ids_filter'
+--------------------
+--- prefix_crossref_ids_filter, prefix_ids_filter: filters to prefix
+-- sources's ids and links to avoid conflicts between sources.  
+-- These two filters will be ran on imported sources if we need to isolate
+-- their internal crossreferences from other sources
+-- The first filter, applied before the user's, handles Pandoc-crossref 
+-- crossreferences. The second, applied after, handles remaining 
+-- crossreferences. 
+return [[
+-- # Global variables
+
+---@type string user's custom prefix
+local prefix = ''
+---@type pandoc.List identifers removed
+local old_identifiers = pandoc.List:new()
+---@type pandoc.List identifers added
+local new_identifiers = pandoc.List:new()
+---@type pandoc.List identifiers to ignore
+local ids_to_ignore = pandoc.List:new()
+---@type boolean whether to process pandoc-crossref links
+local pandoc_crossref = true
+
+local crossref_prefixes = pandoc.List:new({'fig','sec','eq','tbl','lst',
+        'Fig','Sec','Eq','Tbl','Lst'})
+local crossref_str_prefixes = pandoc.List:new({'eq','tbl','lst',
+        'Eq','Tbl','Lst'}) -- found in Str elements (captions or after eq)
+local codeblock_captions = true -- is the codeblock caption syntax on?
+
+--- type: pandoc-friendly type function
+-- pandoc.utils.type is only defined in Pandoc >= 2.17
+-- if it isn't, we extend Lua's type function to give the same values
+-- as pandoc.utils.type on Meta objects: Inlines, Inline, Blocks, Block,
+-- string and booleans
+-- Caution: not to be used on non-Meta Pandoc elements, the 
+-- results will differ (only 'Block', 'Blocks', 'Inline', 'Inlines' in
+-- >=2.17, the .t string in <2.17).
+local type = pandoc.utils.type or function (obj)
+        local tag = type(obj) == 'table' and obj.t and obj.t:gsub('^Meta', '')
+        return tag and tag ~= 'Map' and tag or type(obj)
+    end
+
+--- get_options: get filter options for document's metadata
+-- @param meta pandoc Meta element
+function get_options(meta)
+
+    -- syntactic sugar: options aliases
+    -- merging behaviour: aliases prevail
+    local aliases = {'prefix', 'pandoc-crossref'}
+    for _,alias in ipairs(aliases) do
+        if meta['prefix-ids-' .. alias] ~= nil then
+            -- create a 'prefix-ids' key if needed
+            if not meta['prefix-ids'] then
+                meta['prefix-ids'] = pandoc.MetaMap({})
+            end
+            meta['prefix-ids'][alias] = meta['prefix-ids-' .. alias]
+            meta['prefix-ids-' .. alias] = nil
+        end
+    end
+
+    -- save options in global variables
+    if meta['prefix-ids'] then
+
+        if meta['prefix-ids']['prefix'] then
+            prefix = pandoc.utils.stringify(meta['prefix-ids']['prefix'])
+        end
+        if meta['prefix-ids']['pandoc-crossref'] ~= nil 
+            and meta['prefix-ids']['pandoc-crossref'] == false then
+            pandoc_crossref = false
+        end
+        
+    end
+
+    -- if meta.codeBlockCaptions is false then we should *not*
+    -- process `lst:label` identifiers that appear in Str elements
+    -- (that is, in codeblock captions). We will still convert
+    -- those that appear as CodeBlock attributes
+    if not meta.codeBlockCaptions then
+        codeblock_captions = false
+        crossref_str_prefixes = crossref_str_prefixes:filter(
+            function(item) return item ~= 'lst' end)
+    end
+
+    return meta
+end
+
+--- process_doc: process the pandoc document
+-- generates a prefix if needed, walk through the document
+-- and adds a prefix to all elements with identifier.
+-- @param pandoc Pandoc element
+-- @TODO handle meta fields that may contain identifiers? abstract
+-- and thanks?
+function process_doc(doc)
+
+    -- generate prefix if needed
+    if prefix == '' then
+        prefix = pandoc.utils.sha1(pandoc.utils.stringify(doc.blocks))
+    end
+
+    -- add_prefix function
+    -- check that it's a pandoc-crossref type
+    -- do not add prefixes to empty identifiers
+    -- store the old identifiers to later fix links
+    add_prefix = function (el)
+        if el.identifier and el.identifier ~= '' then
+            -- if pandoc-crossref type, we add the prefix after "fig:", "tbl", ...
+            -- though (like pandoc-crossref) we must ignore #lst:label unless there's 
+            -- a caption attribute or the codeblock caption syntax is on
+            if pandoc_crossref then
+                local type, identifier = el.identifier:match('^(%a+):(.*)')
+                if type and identifier and crossref_prefixes:find(type) then
+                    -- special case in which we don't touch it:
+                    -- a codeblock with #lst:label id but no caption
+                    -- nor caption table syntax on
+                    if el.t == 'CodeBlock' and not codeblock_captions 
+                        and type == 'lst' and (not el.attributes
+                            or not el.attributes.caption) then
+                        return
+                    -- in all other cases we add prefix between `type`
+                    -- and `identifier`
+                    -- NOTE: in principle we should check that if it's
+                    -- a codeblock it has a caption paragraph before or
+                    -- after, but that requires going through the doc
+                    -- el by el, not worth it. 
+                    else
+                        old_identifiers:insert(type .. ':' .. identifier)
+                        new_id =  type .. ':' .. prefix .. identifier
+                        el.identifier = new_id
+                        new_identifiers:insert(new_id)
+                        return el
+                    end
+                end
+            end
+            -- if no pandoc_crossref action was taken, apply simple prefix
+            -- Warning: if `autoSectionLabels` is true, pandoc-crossref
+            -- will add `sec:` to Header element ids; so we anticipate that
+            old_identifiers:insert(el.identifier)
+            new_id = prefix .. el.identifier
+            el.identifier = new_id
+            if el.t == 'Header' 
+                and doc.meta.autoSectionLabels ~= false then
+                new_identifiers:insert('sec:' .. new_id)
+            else
+                new_identifiers:insert(new_id)
+            end
+            return el
+        end
+    end
+    -- add_prefix_string function
+    -- handles {#eq:label} for equations and {#tbl:label} or {#lst:label}
+    -- in table or listing captions. 
+    add_prefix_string = function(el)
+        local type, identifier = el.text:match('^{#(%a+):(.*)}')
+        if type and identifier and crossref_str_prefixes:find(type) then
+            old_identifiers:insert(type .. ':' .. identifier)
+            local new_id = type .. ':' .. prefix .. identifier
+            new_identifiers:insert(new_id)
+            return pandoc.Str('{#' .. new_id .. '}')
+        end
+    end
+    -- process_identifiers function
+    -- apply the add_prefix and add_prefix_strings functions to
+    -- elements with pandoc-crossref identifiers
+    process_identifiers = function(blocks)
+        local div = pandoc.walk_block(pandoc.Div(blocks), {
+            Image = add_prefix,
+            Header = add_prefix,
+            Table = add_prefix,
+            CodeBlock = add_prefix,
+            Str = add_prefix_string,
+        })
+        return div.content
+    end
+
+    -- prefix identifiers in doc and in metadata fields with blocks content
+    for key,val in pairs(doc.meta) do
+        if type(val) == 'Blocks' then
+            doc.meta[key] = pandoc.MetaBlocks(
+                        process_identifiers(pandoc.List(val))
+                    )
+        elseif type(val) == 'List' then
+            for i = 1, #val do
+                if type(val[i]) == 'Blocks' then
+                    doc.meta[key][i] = pandoc.MetaBlocks(
+                        process_identifiers(pandoc.List(val[i]))
+                    )
+                end
+            end
+        end
+    end
+    doc.blocks = process_identifiers(doc.blocks)
+
+    -- function to add prefixes to links
+    local add_prefix_to_link = function (link)
+        if link.target:sub(1,1) == '#' 
+            and old_identifiers:find(link.target:sub(2,-1)) then
+            local target = link.target:sub(2,-1)
+            local type = target:match('^(%a+):')
+            if crossref_prefixes:find(type) then
+                link.target = '#' .. type .. ':' .. prefix 
+                    .. target:match('^%a+:(.*)')
+                return link
+            end
+        end
+    end
+    -- function to add prefixes to pandoc-crossref citations
+    -- looking for keys starting with `fig:`, `sec:`, `eq:`, ... 
+    local add_prefix_to_crossref_cites = function (cite)
+        for i = 1, #cite.citations do
+            local type, identifier = cite.citations[i].id:match('^(%a+):(.*)')
+            if type and identifier and crossref_prefixes:find(type) then
+                -- put the type in lowercase to match Fig: and fig:
+                -- note that sec: cites might refer to an old identifier
+                -- that doesn't start with sec:
+                local stype = pandoc.text.lower(type)
+                if old_identifiers:find(stype..':'..identifier) or
+                    (stype == 'sec' and old_identifiers:find(identifier))
+                    then
+                    cite.citations[i].id = type..':'..prefix..identifier
+                end
+            end
+        end
+        return cite
+    end
+    -- function to process links and cites in some blocks
+    process_links = function(blocks) 
+        local div = pandoc.walk_block(pandoc.Div(blocks), {
+            Link = add_prefix_to_link,
+            Cite = pandoc_crossref and add_prefix_to_crossref_cites
+        })
+        return div.content
+    end
+
+    -- process links and cites in doc and in metablocks fields
+    for key,val in pairs(doc.meta) do
+        if type(val) == 'Blocks' then
+            doc.meta[key] = pandoc.MetaBlocks(
+                        process_links(pandoc.List(val))
+                    )
+        elseif type(val) == 'List' then
+            for i = 1, #val do
+                if type(val[i]) == 'Blocks' then
+                    doc.meta[key][i] = pandoc.MetaBlocks(
+                        process_links(pandoc.List(val[i]))
+                    )
+                end
+            end
+        end
+    end
+    doc.blocks = process_links(doc.blocks)
+
+    -- set metadata (in case prefix-ids is ran later on)
+    -- save a list of ids changed
+    if not doc.meta['prefix-ids'] then
+        doc.meta['prefix-ids'] = pandoc.MetaMap({})
+    end
+    doc.meta['prefix-ids'].ignoreids = pandoc.MetaList(new_identifiers)
+
+    -- return the result
+    return doc
+
+end
+
+-- # Main filter
+return {
+    {
+        Meta = get_options,
+        Pandoc = function(doc) 
+            if pandoc_crossref then return process_doc(doc) end
+        end,
+    }
+}
+
+]]
+
+end,
+
+["normalize_meta"] = function()
+--------------------
+-- Module: 'normalize_meta'
+--------------------
+--[[
+    normalize_meta
+
+    Normalize metadata options for collection
+]]
+local log = require('log')
+local type = pandoc.utils.type
+local stringify = pandoc.utils.stringify
+
+--- syntactic_sugar: normalize alias keys in meta
+-- in case of duplicates we warn the user and
+-- use the ones with more explicit names.
+-- if `collection` or `offprints` are strings
+-- we assume they're defaults filepaths.
+local function normalize_meta(meta)
+
+    -- function that converts aliases to official fields in a map
+    -- following an alias table. 
+    -- The map could be the doc's Meta or a MetaMap within it. 
+    -- Use `root` to let the user know what the root key was in the 
+    -- later case in error messages, e.g. "imports[1]/". 
+    -- Merging behaviour: if the official already exists we warn the
+    -- user and simply ignore the alias key.
+    -- Warning: aliases must be acceptable Lua map keys, so they can't
+    --  contain e.g. dashes. Official names aren't restricted.
+    -- @alias_table table an alias map aliasname = officialname. 
+    -- @root string names the root for error messages, e.g. "imports[1]/"
+    -- @map Meta or MetaMap to be cleaned up
+    function make_official(alias_table, root, map)
+        if type(map) == 'table' or type(map) == 'Meta' then
+            for alias,official in pairs(alias_table) do
+                if map[alias] and map[official] then
+                    log('WARNING', 'Metadata: `'..root..alias..'` '
+                         ..'is a duplicate of `'..root..official..'`, '
+                        ..'it will be ignored.')
+                    map[alias] = nil
+                elseif map[alias] then
+                    map[official] = map[alias]
+                    map[alias] = nil
+                end
+            end
+        end
+        return map
+    end
+
+    local aliases = {
+        global = 'global-metadata',
+        metadata = 'child-metadata',
+    }
+    meta = make_official(aliases, '', meta)
+
+    if meta.imports and type(meta.imports) == 'List' then 
+        local aliases = {
+            metadata = 'child-metadata'
+        }
+        for i = 1, #meta.imports do
+            local rt = 'imports[' .. i .. ']/'
+            meta.imports[i] = make_official(aliases, rt, meta.imports[i])
+        end
+    end
+
+    if meta.collection and type(meta.collection) ~= 'table' then
+        local filepath = stringify(meta.collection)
+        log('INFO', 'Assuming `collection` is a defaults file ' 
+            .. 'filepath: ' .. filepath .. '.' )
+        meta.collection = pandoc.MetaMap({
+            defaults = filepath
+        })
+    end
+
+    if meta.offprints and type(meta.offprints) ~= 'table' then
+        local filepath = stringify(meta.offprints)
+        log('INFO', 'Assuming `offprints` is a defaults file ' 
+            .. 'filepath: ' .. filepath .. '.' )
+        meta.offprints = pandoc.MetaMap({
+            defaults = filepath
+        })
+    end
+
+    return meta
+end
+
+return normalize_meta
+end,
+
+["log"] = function()
+--------------------
+-- Module: 'log'
+--------------------
+local FILTER_NAME = 'Recursive-Citeproc'
+
+---log: send message to std_error
+---@param type 'INFO'|'WARNING'|'ERROR'
+---@param text string error message
+local function log(type, text)
+    local level = {INFO = 0, WARNING = 1, ERROR = 2}
+    if level[type] == nil then type = 'ERROR' end
+    if level[PANDOC_STATE.verbosity] <= level[type] then
+        local message = '[' .. type .. '] '..FILTER_NAME..': '.. text .. '\n'
+        io.stderr:write(message)
+    end
+  end
+
+return log
+end,
+
+----------------------
+-- Modules part end --
+----------------------
+        }
+        if files[path] then
+            return files[path]
+        else
+            return origin_seacher(path)
+        end
+    end
+end
+---------------------------------------------------------
+----------------Auto generated code block----------------
+---------------------------------------------------------
+--[[-- # Collection builder - Building collections with Pandoc
+
+@author Julien Dutant <https://github.com/jdutant>
+@copyright 2021-2024 Philosophie.ch
+@license MIT - see LICENSE file for details.
+@release 0.5
+]]
+PANDOC_VERSION:must_be_at_least '3.1.1' -- for pandoc.json
+local system = pandoc.system
+local path = pandoc.path
+local stringify = pandoc.utils.stringify
+local type = pandoc.utils.type
+
+local log = require('log')
+local file = require('file')
+local prefix_crossref_ids_filter = require('prefix_crossref_ids_filter')
+local prefix_ids_filter = require('prefix_ids_filter')
+local normalize_meta = require('normalize_meta')
+
+-- # Filter settings
+
+--  environement variables
+local env = {
+    working_directory = system.get_working_directory(),
+}
+env.input_folder = path.directory(PANDOC_STATE['input_files'][1])
+
+-- setup map
+-- further fields that may be added:
+--  - gather: strings list, metadata keys to gather from children
+--  - replace: strings list, metadata keys to be replaced by children's ones
+--  - pass: strings list, metadata keys to be passed onto children
+--  - globalize: strings list, metadata keys to be made global onto children
+local setup = {
+    do_something = false, -- whether the filter needs to do anything
+    isolate = false, -- whether to isolate sources by default
+    needs_isolate_filter = false, -- whether the prefix-ids filters are needed
+    offprint_mode = false, -- whether we're in offprint mode
+}
+
+-- # Helper functions
+
+--- meta_to_yaml: converts MetaMap to yaml, returns empty string if failed.
+---@param map pandoc.MetaMap
+---@return string result
+local function meta_to_yaml (map)
+    if type(map) ~= 'Meta' then
+        map = pandoc.Meta(map)
+    end
+
+    ---@param str string
+    ---@return string
+    local function extract_yaml (str)
+        return str:match("^%-%-%-\n(.*\n)%-%-%-\n") or ''
+    end
+
+    local str = pandoc.write(
+        pandoc.Pandoc({}, map),
+        'markdown',
+        {template = pandoc.template.default('markdown')}
+    )
+
+    return extract_yaml(str)
+
+end
+---save Meta or Metamap as a yaml file
+-- uses pandoc to convert Meta or Metamap to yaml.
+-- a converter would be faster, but would need to parse Meta elements.
+---comment
+---@param map pandoc.Meta|pandoc.MetaMap
+---@param filepath string
+---@return boolean success
+local function save_meta_as_yaml(map, filepath)
+
+    yaml = meta_to_yaml(map)
+
+    local success = file.write(yaml, filepath)
+
+    if success then
+        return true
+    else
+        return false
+    end
+
+end
 
 -- # Collection functions
 
@@ -774,7 +870,7 @@ return {
 -- in offprint mode (single source) or for keys that don't overlap across
 -- sources. 
 -- If a key is set to be gathered and replaced, it will be replaced.
-function gather_and_replace(meta)
+local function gather_and_replace(meta)
     for _,item in ipairs(meta.imports) do
         -- we know `item `is a MetaMap, but not if it has a `file` key
         -- if it doesn't we skip it
@@ -784,9 +880,12 @@ function gather_and_replace(meta)
 
         -- read and parse the file
         local filepath = stringify(item.file)
-        local file = io.open(filepath, 'r')
-        local itemdoc = pandoc.read(file:read('a'))
-        file:close()
+        local success, contents = file.read(filepath)
+        if not success then
+            log('ERROR', 'Cannot read file '..filepath..'.')
+            return
+        end
+        local itemdoc = pandoc.read(contents)
 
         -- for each key to gather, we check if it exists
         -- and we import it in our document's metadata
@@ -836,7 +935,7 @@ end
 -- @param meta
 -- @param setup.globalize global variable
 -- @return metadata document
-function globalize_and_pass(meta)
+local function globalize_and_pass(meta)
     -- mapping `setup` keys with `meta` keys
     local map = { 
         globalize = 'global-metadata',
@@ -856,7 +955,7 @@ function globalize_and_pass(meta)
                         meta[metakey][key] = meta[key]
                     else
                         -- "pass/globalize `key` replaced `key` in `metakey`"
-                        message('WARNING', 'Metadata: ' .. setupkey ..
+                        log('WARNING', 'Metadata: ' .. setupkey ..
                             ' `' .. key .. '` replaced `' .. key .. 
                             '` in `' .. metakey .. '`.')
                         meta[metakey][key] = meta[key]
@@ -872,7 +971,7 @@ end
 -- passes metadata to sources using a temporary metadata file,
 -- runs pandoc on them in the required mode and places the 
 -- result in the main document
-function import_sources(doc, tmpdir)
+local function import_sources(doc, tmpdir)
 
     -- CONSTANTS
     local acceptable_modes = pandoc.List:new({'native', 'raw', 'direct'})
@@ -880,13 +979,18 @@ function import_sources(doc, tmpdir)
     -- save_yaml_if_needed: if element isn't a map, assume it's
     -- a filepath to metadata file; otherwise save a temp
     -- yaml file `default_filename`. Either way, returns a filepath.
-    function save_yaml_if_needed(element, default_filename)
+    local function save_yaml_if_needed(element, default_filename)
         if type(element) ~= 'table' and type(element) ~= 'Meta' then
             return stringify(element)
         else
             local filepath = path.join({tmpdir, default_filename})
-            save_meta_as_yaml(element,filepath)
-            return filepath
+            local success = save_meta_as_yaml(element,filepath)
+            if not success then
+                log('ERROR', 'Could not write '..filepath..'.')
+                os.exit(1)
+            else
+                return filepath
+            end
         end
     end
 
@@ -916,7 +1020,11 @@ function import_sources(doc, tmpdir)
 
     -- DEBUG: display a temp yaml files
     -- local file = io.open(generic_meta_fpath, 'r')
-    -- print('yaml file ', generic_meta_fpath, ':')
+    -- print('Generic meta yaml file ', generic_meta_fpath, ':')
+    -- print(file:read('a'))
+    -- file:close()
+    -- local file = io.open(generic_defaults_fpath, 'r')
+    -- print('Generic defaults yaml file ', generic_defaults_fpath, ':')
     -- print(file:read('a'))
     -- file:close()
 
@@ -968,7 +1076,7 @@ function import_sources(doc, tmpdir)
         local local_defaults_fpath = ''
         local mode = generic_mode
         local merge_defaults = false
-        local merge_meta = false
+        local merge_meta = true
         local isolate = false
 
         -- do we need local metadata? 
@@ -980,9 +1088,9 @@ function import_sources(doc, tmpdir)
         -- DEBUG: display local yaml file
         -- if local_meta_fpath ~= '' then 
         --     print('IMPORT #', i, local_meta_fpath)
-        --     local file = io.open(local_meta_fpath, 'r')
-        --     print(file:read('a'))
-        --     file:close()
+        --     local f = io.open(local_meta_fpath, 'r')
+        --     print(f:read('a'))
+        --     f:close()
         -- end
 
         -- do we need local defaults?
@@ -1090,7 +1198,7 @@ function import_sources(doc, tmpdir)
             for i = 2, #args do
                 argstring = argstring .. ' ' .. args[i]
             end
-            message('INFO', 'Running pandoc on ' .. src .. ' with ' .. argstring)
+            log('INFO', 'Running pandoc on ' .. src .. ' with ' .. argstring)
         end
 
         --  run the commands for the required mode
@@ -1154,7 +1262,7 @@ function prepare(meta)
     -- check meta.imports
     -- do nothing if it doesn't exist, ensure it's a list otherwise
     if not meta.imports then
-        message('INFO', "No `imports` field in ".. PANDOC_STATE['input_files'][1] 
+        log('INFO', "No `imports` field in ".. PANDOC_STATE['input_files'][1] 
             .. ", nothing to import.")
         return meta
     elseif type(meta.imports) ~= 'List' then
@@ -1189,7 +1297,7 @@ function prepare(meta)
                 if f then
                     f:close()
                 else
-                    message('ERROR', 'File '..filepath..' not found.')
+                    log('ERROR', 'File '..filepath..' not found.')
                     meta.imports[i].fileoff = filepath
                     meta.imports[i].file = nil
                 end
@@ -1208,10 +1316,10 @@ function prepare(meta)
             if meta.offprints then 
                 meta.collection = meta.offprints
             end
-            message('INFO', 'Offprint mode, source number ' .. tostring(index))
+            log('INFO', 'Offprint mode, source number ' .. tostring(index))
         else
             meta['offprint-mode'] = nil
-            message('WARNING', 'The offprint required (' .. tostring(index) 
+            log('WARNING', 'The offprint required (' .. tostring(index) 
                 .. ") doesn't exist, ignoring offprint mode.")
         end
     end
@@ -1274,85 +1382,11 @@ function prepare(meta)
 
 end
 
---- syntactic_sugar: normalize alias keys in meta
--- in case of duplicates we warn the user and
--- use the ones with more explicit names.
--- if `collection` or `offprints` are strings
--- we assume they're defaults filepaths.
-function syntactic_sugar(meta)
-
-    -- function that converts aliases to official fields in a map
-    -- following an alias table. 
-    -- The map could be the doc's Meta or a MetaMap within it. 
-    -- Use `root` to let the user know what the root key was in the 
-    -- later case in error messages, e.g. "imports[1]/". 
-    -- Merging behaviour: if the official already exists we warn the
-    -- user and simply ignore the alias key.
-    -- Warning: aliases must be acceptable Lua map keys, so they can't
-    --  contain e.g. dashes. Official names aren't restricted.
-    -- @alias_table table an alias map aliasname = officialname. 
-    -- @root string names the root for error messages, e.g. "imports[1]/"
-    -- @map Meta or MetaMap to be cleaned up
-    function make_official(alias_table, root, map)
-        if type(map) == 'table' or type(map) == 'Meta' then
-            for alias,official in pairs(alias_table) do
-                if map[alias] and map[official] then
-                    message('WARNING', 'Metadata: `'..root..alias..'` '
-                         ..'is a duplicate of `'..root..official..'`, '
-                        ..'it will be ignored.')
-                    map[alias] = nil
-                elseif map[alias] then
-                    map[official] = map[alias]
-                    map[alias] = nil
-                end
-            end
-        end
-        return map
-    end
-
-    local aliases = {
-        global = 'global-metadata',
-        metadata = 'child-metadata',
-    }
-    meta = make_official(aliases, '', meta)
-
-    if meta.imports and type(meta.imports) == 'List' then 
-        local aliases = {
-            metadata = 'child-metadata'
-        }
-        for i = 1, #meta.imports do
-            local rt = 'imports[' .. i .. ']/'
-            meta.imports[i] = make_official(aliases, rt, meta.imports[i])
-        end
-    end
-
-    if meta.collection and type(meta.collection) ~= 'table' then
-        local filepath = stringify(meta.collection)
-        message('INFO', 'Assuming `collection` is a defaults file ' 
-            .. 'filepath: ' .. filepath .. '.' )
-        meta.collection = pandoc.MetaMap({
-            defaults = filepath
-        })
-    end
-
-    if meta.offprints and type(meta.offprints) ~= 'table' then
-        local filepath = stringify(meta.offprints)
-        message('INFO', 'Assuming `offprints` is a defaults file ' 
-            .. 'filepath: ' .. filepath .. '.' )
-        meta.offprints = pandoc.MetaMap({
-            defaults = filepath
-        })
-    end
-
-    return meta
-end
-
 --- Main filter
--- syntactic sugar: normalize alias keys in meta
 return {
     {
         Meta = function(meta)
-            return syntactic_sugar(meta)
+            return normalize_meta(meta)
         end,
         Pandoc = function(doc)
             doc.meta = prepare(doc.meta)

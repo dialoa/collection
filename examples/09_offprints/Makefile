@@ -2,7 +2,6 @@ DIFF ?= diff --strip-trailing-cr -u
 FILPATH ?= ../../
 
 .PHONY: test
-
 test: $(FILPATH)collection.lua master.md chapter1.md chapter2.md \
 	expected-collection.html expected-chap1.html expected-chap2.html \
 	resources/collection-defaults.yaml resources/chapter-template.html \
@@ -13,6 +12,9 @@ test: $(FILPATH)collection.lua master.md chapter1.md chapter2.md \
 	-t html --verbose | $(DIFF) expected-chap1.html -
 	@pandoc -L $(FILPATH)collection.lua master.md -M offprint-mode=2 \
 	-t html --verbose | $(DIFF) expected-chap2.html -
+
+.PHONY: generate
+generate: expected-collection.html expected-chap1.html expected-chap2.html
 
 expected-collection.html: $(FILPATH)collection.lua master.md \
 	resources/collection-defaults.yaml resources/chapter-template.html \

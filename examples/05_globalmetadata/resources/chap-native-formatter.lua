@@ -13,6 +13,10 @@ return {{
 			doc.blocks:insert(1, pandoc.Para{
 				pandoc.Str('The filter understands this is from volume: ' .. vol)})
 			modified = true
+		else
+			doc.blocks:insert(1, pandoc.Para{
+				pandoc.Str("The filter hasn't found volume metadata.")})
+			modified = true
 		end
 
 		if doc.meta.title then
@@ -20,9 +24,7 @@ return {{
 			modified = true
 		end
 
-		if modified then 
-			return doc
-		end
+		return modified and doc or nil 
 
 	end
 }}

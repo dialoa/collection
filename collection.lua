@@ -436,7 +436,7 @@ function get_options(meta)
             prefix = pandoc.utils.stringify(meta['prefix-ids']['prefix'])
         end
         if meta['prefix-ids']['pandoc-crossref'] ~= nil 
-            and meta['prefix-ids']['pandoc-crossref'] == false then
+          and meta['prefix-ids']['pandoc-crossref'] == false then
             pandoc_crossref = false
         end
         
@@ -509,7 +509,7 @@ function process_doc(doc)
             new_id = prefix .. el.identifier
             el.identifier = new_id
             if el.t == 'Header' 
-                and doc.meta.autoSectionLabels ~= false then
+              and doc.meta.autoSectionLabels ~= false then
                 new_identifiers:insert('sec:' .. new_id)
             else
                 new_identifiers:insert(new_id)
@@ -517,7 +517,7 @@ function process_doc(doc)
             return el
         end
     end
-    -- add_prefix_string function
+   -- add_prefix_string function
     -- handles {#eq:label} for equations and {#tbl:label} or {#lst:label}
     -- in table or listing captions. 
     add_prefix_string = function(el)
@@ -534,10 +534,13 @@ function process_doc(doc)
     -- elements with pandoc-crossref identifiers
     process_identifiers = function(blocks)
         local div = pandoc.walk_block(pandoc.Div(blocks), {
-            Image = add_prefix,
+            CodeBlock = add_prefix,
+            Figure = add_prefix,
             Header = add_prefix,
             Table = add_prefix,
-            CodeBlock = add_prefix,
+            Code = add_prefix,
+            Image = add_prefix,
+            --Link = add_prefix, REMOVED css writers might not expect it
             Str = add_prefix_string,
         })
         return div.content
@@ -546,7 +549,7 @@ function process_doc(doc)
     -- prefix identifiers in doc and in metadata fields with blocks content
     for key,val in pairs(doc.meta) do
         if type(val) == 'Blocks' then
-            doc.meta[key] = pandoc.MetaBlocks(
+          doc.meta[key] = pandoc.MetaBlocks(
                         process_identifiers(pandoc.List(val))
                     )
         elseif type(val) == 'List' then
@@ -561,10 +564,10 @@ function process_doc(doc)
     end
     doc.blocks = process_identifiers(doc.blocks)
 
-    -- function to add prefixes to links
+   -- function to add prefixes to links
     local add_prefix_to_link = function (link)
         if link.target:sub(1,1) == '#' 
-            and old_identifiers:find(link.target:sub(2,-1)) then
+          and old_identifiers:find(link.target:sub(2,-1)) then
             local target = link.target:sub(2,-1)
             local type = target:match('^(%a+):')
             if crossref_prefixes:find(type) then
@@ -585,8 +588,8 @@ function process_doc(doc)
                 -- that doesn't start with sec:
                 local stype = pandoc.text.lower(type)
                 if old_identifiers:find(stype..':'..identifier) or
-                    (stype == 'sec' and old_identifiers:find(identifier))
-                    then
+                  (stype == 'sec' and old_identifiers:find(identifier))
+                  then
                     cite.citations[i].id = type..':'..prefix..identifier
                 end
             end
@@ -605,7 +608,7 @@ function process_doc(doc)
     -- process links and cites in doc and in metablocks fields
     for key,val in pairs(doc.meta) do
         if type(val) == 'Blocks' then
-            doc.meta[key] = pandoc.MetaBlocks(
+          doc.meta[key] = pandoc.MetaBlocks(
                         process_links(pandoc.List(val))
                     )
         elseif type(val) == 'List' then
